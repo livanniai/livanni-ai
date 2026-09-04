@@ -2,12 +2,13 @@
   command = "npm run build"
   publish = ".next"
 
-[build.environment]
-  SECRETS_SCAN_OMIT_PATHS = ".netlify/.next/cache"
-  SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL"
-
-# API yönlendirmeleri (404 / HTML hatasını önler)
+# Next.js API route'larının ve sayfalarının Netlify tarafından doğru yakalanması için
 [[redirects]]
   from = "/api/*"
-  to = "/.netlify/functions/:splat"
+  to = "/api/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
   status = 200
