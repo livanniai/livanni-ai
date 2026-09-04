@@ -1,6 +1,7 @@
 import Jimp from 'jimp';
 
 export default async function handler(req, res) {
+  // Sadece POST isteklerine izin ver
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Sadece POST istekleri kabul edilir.' });
   }
@@ -9,15 +10,15 @@ export default async function handler(req, res) {
     const { prompt, image, imageBase64 } = req.body;
     const inputImage = image || imageBase64;
 
-    // 1. DURUM: Resim Üzerine "Livanni" Yazısı / Filigran Ekleme
+    // 1. DURUM: Kullanıcı Görsel Yüklediyse (Filigran / Yazı Ekleme)
     if (inputImage) {
       const cleanBase64 = inputImage.includes(',') ? inputImage.split(',')[1] : inputImage;
       const imageBuffer = Buffer.from(cleanBase64, 'base64');
 
       const jimpImage = await Jimp.read(imageBuffer);
-      const textToWrite = prompt && !prompt.toLowerCase().includes('üzerine') ? prompt : 'Livanni';
+      const textToWrite = prompt && prompt.trim().length > 0 ? prompt : 'Livanni';
 
-      // Font dosyası indirmeden dahili standart fontu yükleme
+      // Font yükle
       const font = await Jimp.loadFont(Jimp.FONT_SANS_32_WHITE);
 
       const textWidth = Jimp.measureText(font, textToWrite);
@@ -27,11 +28,11 @@ export default async function handler(req, res) {
       const x = jimpImage.getWidth() - textWidth - padding;
       const y = jimpImage.getHeight() - textHeight - padding;
 
-      // Okunabilirlik için arkasına koyu dikdörtgen şerit ekleme
+      // Yazı arka planı için koyu kutucuk
       const overlay = new Jimp(textWidth + 20, textHeight + 10, 0x00000088);
       jimpImage.composite(overlay, Math.max(10, x - 10), Math.max(10, y - 5));
 
-      // Metni yazma
+      // Yazıyı yaz
       jimpImage.print(font, Math.max(10, x), Math.max(10, y), textToWrite);
 
       const processedBuffer = await jimpImage.getBufferAsync(Jimp.MIME_PNG);
@@ -40,9 +41,9 @@ export default async function handler(req, res) {
       return res.status(200).json({ imageBase64: resultBase64 });
     }
 
-    // 2. DURUM: Sıfırdan Görsel Üretme (Pollinations AI)
+    // 2. DURUM: Sıfırdan Yapay Zeka ile Görsel Üretme
     if (!prompt) {
-      return res.status(400).json({ error: 'Prompt gereklidir.' });
+      return res.status(400).json({ error: 'Lütfen bir görsel tarifi (prompt) girin.' });
     }
 
     const seed = Math.floor(Math.random() * 1000000);
@@ -56,7 +57,7 @@ export default async function handler(req, res) {
     clearTimeout(timeoutId);
 
     if (!imageResponse.ok) {
-      throw new Error(`Görsel servisi yanıt vermedi (${imageResponse.status})`);
+      throw new Error(`Görsel üretme servisi yanıt vermedi (${imageResponse.status})`);
     }
 
     const arrayBuffer = await imageResponse.arrayBuffer();
@@ -66,6 +67,6 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error("Image API Error:", error);
-    return res.status(500).json({ error: `Hata oluştu: ${error.message}` });
+    return res.status(500).json({ error: `Görsel işlenirken hata oluştu: ${error.message}` });
   }
 }
