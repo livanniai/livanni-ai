@@ -7,96 +7,149 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
-    --bg: #f7f5f2; --panel: #ffffff; --ink: #1e1b16; --muted: #7a7267;
-    --accent: #8a6d3b; --accent-dark: #6b5329; --border: #e5e0d8;
+    --bg: #131314;
+    --surface: #1e1f20;
+    --surface-hover: #2d2e30;
+    --text: #e3e3e3;
+    --text-muted: #c4c7c5;
+    --accent: #8ab4f8;
+    --accent-hover: #aecbfa;
+    --border: #3c4043;
+    --error: #f28b82;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); }
-  header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
-  header h1 { font-size: 18px; margin: 0; }
-  .tabs { display: flex; gap: 8px; }
-  .tab { padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); cursor: pointer; font-size: 14px; color: var(--muted); }
-  .tab.active { background: var(--accent); color: white; border-color: var(--accent); }
-  .userbar { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
-  .userbar button { padding: 6px 12px; font-size: 13px; }
-  main { max-width: 760px; margin: 0 auto; padding: 24px; }
-  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px; min-height: 420px; display: flex; flex-direction: column; }
-  .messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; max-height: 460px; }
-  .msg { padding: 10px 14px; border-radius: 10px; max-width: 85%; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
-  .msg.user { align-self: flex-end; background: var(--accent); color: white; }
-  .msg.ai { align-self: flex-start; background: #f1ede6; color: var(--ink); }
-  .msg img { max-width: 100%; border-radius: 8px; margin-top: 6px; display: block; }
-  form { display: flex; gap: 8px; }
-  input[type="text"], input[type="email"], input[type="password"] { flex: 1; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); font-size: 14px; width: 100%; }
-  button { padding: 12px 18px; border-radius: 10px; border: none; background: var(--accent); color: white; font-size: 14px; cursor: pointer; }
-  button:hover { background: var(--accent-dark); }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
-  .hint { font-size: 12px; color: var(--muted); margin-top: 10px; }
-  .status { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
-  .authBox { max-width: 380px; margin: 60px auto; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 28px; }
-  .authBox h2 { margin-top: 0; font-size: 18px; }
-  .authBox label { font-size: 13px; color: var(--muted); display: block; margin: 12px 0 6px; }
-  .authBox .switchLink { font-size: 13px; color: var(--accent); cursor: pointer; margin-top: 14px; text-align: center; }
-  .authError { color: #b3432c; font-size: 13px; margin-top: 10px; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); display: flex; height: 100vh; overflow: hidden; }
+
+  /* Sol Kenar Çubuğu */
+  aside { width: 280px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 16px; gap: 12px; }
+  .brand { font-size: 16px; font-weight: 500; display: flex; align-items: center; gap: 8px; padding: 8px; color: var(--text); }
+  .new-chat-btn { background: var(--surface-hover); color: var(--text); border: 1px solid var(--border); padding: 10px 16px; border-radius: 24px; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 8px; width: fit-content; font-weight: 500; }
+  .new-chat-btn:hover { background: var(--border); }
+
+  /* Model Seçim Alanı */
+  .model-selector { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .model-selector label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .model-select { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-size: 13px; outline: none; cursor: pointer; }
+
+  .menu-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+  .menu-item { padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .menu-item:hover, .menu-item.active { background: var(--surface-hover); color: var(--text); }
+
+  .user-bar { border-top: 1px solid var(--border); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--text-muted); }
+  .user-bar button { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+  .user-bar button:hover { background: var(--surface-hover); }
+
+  /* Ana İçerik Alanı */
+  .main-container { flex: 1; display: flex; flex-direction: column; height: 100vh; background: var(--bg); position: relative; }
+  header { padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 500; color: var(--text-muted); }
+
+  main { flex: 1; max-width: 800px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; padding: 0 20px 20px 20px; overflow: hidden; }
+  .messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding-bottom: 20px; }
+  .msg { padding: 12px 16px; border-radius: 12px; max-width: 85%; font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
+  .msg.user { align-self: flex-end; background: var(--surface-hover); color: var(--text); border-bottom-right-radius: 4px; }
+  .msg.ai { align-self: flex-start; background: var(--surface); color: var(--text); border-bottom-left-radius: 4px; }
+  .msg img { max-width: 100%; border-radius: 8px; margin-top: 8px; display: block; }
+
+  /* Giriş Kutusu */
+  .input-container { background: var(--surface); border: 1px solid var(--border); border-radius: 28px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+  .input-row { display: flex; align-items: center; gap: 10px; }
+  textarea { flex: 1; background: transparent; border: none; color: var(--text); font-size: 14px; outline: none; resize: none; max-height: 120px; font-family: inherit; }
+  .send-btn { background: var(--accent); color: var(--bg); border: none; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: bold; }
+  .send-btn:hover { background: var(--accent-hover); }
+  .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .hint-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); padding: 0 4px; }
+
+  /* Giriş Ekranı */
+  .auth-overlay { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .authBox { width: 100%; max-width: 380px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px; }
+  .authBox h2 { margin-top: 0; font-size: 20px; margin-bottom: 20px; color: var(--text); }
+  .authBox label { font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 6px; }
+  .authBox input { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 16px; width: 100%; padding: 10px 12px; color: var(--text); outline: none; }
+  .authBox button { width: 100%; background: var(--accent); border: none; color: var(--bg); padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+  .authBox .switchLink { font-size: 13px; color: var(--accent); cursor: pointer; margin-top: 16px; text-align: center; display: block; }
+  .authError { color: var(--error); font-size: 12px; margin-top: 10px; text-align: center; }
   .hidden { display: none !important; }
-  .limitBadge { background: #f1ede6; padding: 4px 10px; border-radius: 20px; font-size: 12px; }
 </style>
 </head>
 <body>
 
-<div id="authScreen" class="authBox">
-  <h2 id="authTitle">Giriş Yap</h2>
-  <label>E-posta</label>
-  <input type="email" id="authEmail" placeholder="ornek@mail.com" />
-  <label>Şifre</label>
-  <input type="password" id="authPassword" placeholder="••••••••" />
-  <div style="margin-top:16px; display:flex; gap:8px;">
-    <button id="authSubmit" style="flex:1;">Giriş Yap</button>
+<!-- Giriş Ekranı -->
+<div id="authScreen" class="auth-overlay">
+  <div class="authBox">
+    <h2 id="authTitle">Giriş Yap</h2>
+    <label>E-posta Adresi</label>
+    <input type="email" id="authEmail" placeholder="ornek@mail.com" />
+    <label>Şifre</label>
+    <input type="password" id="authPassword" placeholder="••••••••" />
+    <button id="authSubmit">Giriş Yap</button>
+    <div class="authError" id="authError"></div>
+    <div class="switchLink" id="authSwitch">Hesabın yok mu? Kayıt ol</div>
   </div>
-  <div class="authError" id="authError"></div>
-  <div class="switchLink" id="authSwitch">Hesabın yok mu? Kayıt ol</div>
 </div>
 
-<div id="appScreen" class="hidden">
-  <header>
-    <h1>Livanni AI Stüdyo</h1>
-    <div class="tabs">
-      <button class="tab active" id="tab-chat">Sohbet</button>
-      <button class="tab" id="tab-image">Görsel Üret</button>
-    </div>
-    <div class="userbar">
-      <span id="userEmail"></span>
-      <span class="limitBadge" id="limitBadge">-- / --</span>
+<!-- Sol Menü -->
+<aside>
+  <div class="brand">✨ Livanni AI</div>
+  <button class="new-chat-btn" id="newChatBtn">＋ Yeni Sohbet</button>
+  
+  <div class="model-selector">
+    <label>Yapay Zeka Modeli</label>
+    <select id="modelSelect" class="model-select">
+      <option value="gemini">Gemini Pro</option>
+      <option value="claude">Claude Sonnet</option>
+    </select>
+  </div>
+
+  <div style="font-size: 11px; color: var(--text-muted); margin-top: 15px; text-transform: uppercase; letter-spacing: 0.5px;">Sohbet Geçmişi</div>
+  <div class="menu-list" id="chatHistoryList">
+    <div class="menu-item active" onclick="loadSession(0)">Aktif Sohbet</div>
+  </div>
+
+  <div class="user-bar">
+    <div id="userEmail" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></div>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <span id="limitBadge" style="font-size: 11px;">Limit: --/--</span>
       <button id="logoutBtn">Çıkış</button>
     </div>
+  </div>
+</aside>
+
+<!-- Ana Ekran -->
+<div class="main-container">
+  <header>
+    <div id="topTitle">Livanni AI Asistan</div>
+    <div id="status" style="font-size: 13px;">Hazır</div>
   </header>
 
   <main>
-    <div class="panel">
-      <div class="status" id="status">Hazır.</div>
-      <div class="messages" id="messages"></div>
-      <form id="form">
-        <input type="text" id="input" placeholder="Bir mesaj yaz..." autocomplete="off" />
-        <button type="submit" id="sendBtn">Gönder</button>
-      </form>
-      <div class="hint" id="hint">Sohbet modundasın — mesajın Claude'a gidiyor.</div>
+    <div class="messages" id="messages">
+      <div class="msg ai">Merhaba! Ben Livanni AI. Bugün sana nasıl yardımcı olabilirim?</div>
+    </div>
+
+    <div class="input-container">
+      <div class="input-row">
+        <textarea id="input" rows="1" placeholder="Livanni AI'a bir şeyler sorun..." autocomplete="off"></textarea>
+        <button id="sendBtn" class="send-btn">↑</button>
+      </div>
+      <div class="hint-row">
+        <span id="hint">Enter ile gönder, Shift+Enter ile alt satıra geç.</span>
+      </div>
     </div>
   </main>
 </div>
 
 <script>
-// Çakışma sorununu tamamen ortadan kaldırmak için global değişken adı 'supabaseClient' olarak güncellendi.
 const supabaseClient = window.supabase.createClient(
   "https://zqwfucqqbwrcevxohdby.supabase.co",
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpxd2Z1Y3FxYndyY2V2eG9oZGJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1NDAxNTMsImV4cCI6MjEwNDExNjE1M30.hG4TJz-xsjakB98KIOwnVzhm8xZkbJ_5WxmyCgR-HRI"
 );
 
-let mode = "chat";
-let chatHistory = [];
+let sessions = [{ title: "Yeni Sohbet", history: [] }];
+let currentSessionIndex = 0;
 let currentSession = null;
 
 const authScreen = document.getElementById("authScreen");
-const appScreen = document.getElementById("appScreen");
 const authTitle = document.getElementById("authTitle");
 const authEmail = document.getElementById("authEmail");
 const authPassword = document.getElementById("authPassword");
@@ -134,7 +187,7 @@ authSubmit.addEventListener("click", async () => {
       if (data.session) {
         await onLoggedIn(data.session);
       } else {
-        authError.textContent = "Kayıt başarılı! E-postanı kontrol edip doğrula, sonra giriş yap.";
+        authError.textContent = "Kayıt başarılı! E-postanı kontrol et.";
       }
     }
   } catch (err) {
@@ -147,7 +200,6 @@ authSubmit.addEventListener("click", async () => {
 async function onLoggedIn(session) {
   currentSession = session;
   authScreen.classList.add("hidden");
-  appScreen.classList.remove("hidden");
   document.getElementById("userEmail").textContent = session.user.email;
   await refreshLimit();
 }
@@ -159,14 +211,13 @@ async function refreshLimit() {
     .eq("id", currentSession.user.id)
     .single();
   if (!error && data) {
-    document.getElementById("limitBadge").textContent = `${data.usage_today} / ${data.daily_limit} görsel bugün`;
+    document.getElementById("limitBadge").textContent = `Limit: ${data.usage_today}/${data.daily_limit}`;
   }
 }
 
 document.getElementById("logoutBtn").addEventListener("click", async () => {
   await supabaseClient.auth.signOut();
   currentSession = null;
-  appScreen.classList.add("hidden");
   authScreen.classList.remove("hidden");
 });
 
@@ -175,81 +226,109 @@ supabaseClient.auth.getSession().then(({ data }) => {
 });
 
 const messagesEl = document.getElementById("messages");
-const form = document.getElementById("form");
 const input = document.getElementById("input");
 const sendBtn = document.getElementById("sendBtn");
 const statusEl = document.getElementById("status");
-const hintEl = document.getElementById("hint");
-const tabChat = document.getElementById("tab-chat");
-const tabImage = document.getElementById("tab-image");
+const modelSelect = document.getElementById("modelSelect");
+const chatHistoryList = document.getElementById("chatHistoryList");
 
-function addMessage(role, contentHTML) {
-  const div = document.createElement("div");
-  div.className = "msg " + (role === "user" ? "user" : "ai");
-  div.innerHTML = contentHTML;
-  messagesEl.appendChild(div);
+function renderMessages() {
+  messagesEl.innerHTML = "";
+  const currentHist = sessions[currentSessionIndex].history;
+  if (currentHist.length === 0) {
+    messagesEl.innerHTML = `<div class="msg ai">Merhaba! Ben Livanni AI. Bugün sana nasıl yardımcı olabilirim?</div>`;
+    return;
+  }
+  currentHist.forEach(msg => {
+    const div = document.createElement("div");
+    div.className = "msg " + (msg.role === "user" ? "user" : "ai");
+    div.innerHTML = escapeHTML(msg.content);
+    messagesEl.appendChild(div);
+  });
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
-tabChat.addEventListener("click", () => {
-  mode = "chat";
-  tabChat.classList.add("active");
-  tabImage.classList.remove("active");
-  hintEl.textContent = "Sohbet modundasın — mesajın Claude'a gidiyor.";
-  input.placeholder = "Bir mesaj yaz...";
+function renderSidebar() {
+  chatHistoryList.innerHTML = "";
+  sessions.forEach((s, index) => {
+    const item = document.createElement("div");
+    item.className = "menu-item" + (index === currentSessionIndex ? " active" : "");
+    item.textContent = s.title;
+    item.onclick = () => loadSession(index);
+    chatHistoryList.appendChild(item);
+  });
+}
+
+function loadSession(index) {
+  currentSessionIndex = index;
+  renderMessages();
+  renderSidebar();
+}
+
+document.getElementById("newChatBtn").addEventListener("click", () => {
+  sessions.unshift({ title: "Yeni Sohbet", history: [] });
+  currentSessionIndex = 0;
+  renderMessages();
+  renderSidebar();
+  statusEl.textContent = "Hazır";
 });
 
-tabImage.addEventListener("click", () => {
-  mode = "image";
-  tabImage.classList.add("active");
-  tabChat.classList.remove("active");
-  hintEl.textContent = "Görsel üretim modundasın — günlük limitin var, aşağıda görebilirsin.";
-  input.placeholder = "Ne tür bir görsel istiyorsun?";
+input.addEventListener("input", function() {
+  this.style.height = "auto";
+  this.style.height = (this.scrollHeight) + "px";
 });
 
-form.addEventListener("submit", async (e) => {
-  e.preventDefault();
+input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    handleSend();
+  }
+});
+
+sendBtn.addEventListener("click", handleSend);
+
+async function handleSend() {
   const text = input.value.trim();
   if (!text || !currentSession) return;
 
-  addMessage("user", escapeHTML(text));
+  const activeSession = sessions[currentSessionIndex];
+  if (activeSession.history.length === 0) {
+    activeSession.title = text.length > 20 ? text.substring(0, 20) + "..." : text;
+    renderSidebar();
+  }
+
+  activeSession.history.push({ role: "user", content: text });
+  renderMessages();
   input.value = "";
+  input.style.height = "auto";
   sendBtn.disabled = true;
-  statusEl.textContent = mode === "chat" ? "Claude düşünüyor..." : "Gemini görseli üretiyor...";
+  
+  const selectedModel = modelSelect.value;
+  statusEl.textContent = selectedModel === "gemini" ? "Gemini düşünüyor..." : "Claude düşünüyor...";
 
   try {
     const authHeader = { Authorization: `Bearer ${currentSession.access_token}` };
-
-    if (mode === "chat") {
-      chatHistory.pyush({ role: "user", content: text });
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeader },
-        body: JSON.stringify({ messages: chatHistory })
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      chatHistory.push({ role: "assistant", content: data.reply });
-      addMessage("ai", escapeHTML(data.reply));
-    } else {
-      const res = await fetch("/api/image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeader },
-        body: JSON.stringify({ prompt: text })
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      addMessage("ai", `<div>İşte üretilen görsel:</div><img src="data:image/png;base64,${data.imageBase64}" />`);
-      await refreshLimit();
-    }
-    statusEl.textContent = "Hazır.";
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeader },
+      body: JSON.stringify({ messages: activeSession.history, model: selectedModel })
+    });
+    
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    
+    activeSession.history.push({ role: "assistant", content: data.reply });
+    renderMessages();
+    statusEl.textContent = "Hazır";
+    await refreshLimit();
   } catch (err) {
-    statusEl.textContent = "Hata: " + err.message;
-    addMessage("ai", "Üzgünüm: " + escapeHTML(err.message));
+    statusEl.textContent = "Hata oluştu";
+    activeSession.history.push({ role: "assistant", content: "Üzgünüm, bir hata oluştu: " + err.message });
+    renderMessages();
   } finally {
     sendBtn.disabled = false;
   }
-});
+}
 
 function escapeHTML(str) {
   const div = document.createElement("div");
