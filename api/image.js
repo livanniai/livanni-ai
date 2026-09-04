@@ -1,72 +1,30 @@
-import Jimp from 'jimp';
-
-export default async function handler(req, res) {
-  // Sadece POST isteklerine izin ver
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Sadece POST istekleri kabul edilir.' });
-  }
-
+// backend (/api/image.js) örneği
+export async function handler(event, context) {
   try {
-    const { prompt, image, imageBase64 } = req.body;
-    const inputImage = image || imageBase64;
+    const { prompt, imageBase64 } = JSON.parse(event.body);
 
-    // 1. DURUM: Kullanıcı Görsel Yüklediyse (Filigran / Yazı Ekleme)
-    if (inputImage) {
-      const cleanBase64 = inputImage.includes(',') ? inputImage.split(',')[1] : inputImage;
-      const imageBuffer = Buffer.from(cleanBase64, 'base64');
+    // Pollinations URL tabanlı dinamik istek gönderimi
+    // Prompt ve model parametreleri URL üzerinden iletilir
+    const encodedPrompt = encodeURIComponent(prompt || "improve furniture background, studio light, 4k");
+    
+    // Eğer mevcut bir görsel yüklendiyse prompt'a stil ve img-to-img komutları eklenir
+    let apiUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=1024&height=1024&nologo=true&seed=${Math.floor(Math.random() * 100000)}`;
 
-      const jimpImage = await Jimp.read(imageBuffer);
-      const textToWrite = prompt && prompt.trim().length > 0 ? prompt : 'Livanni';
+    const response = await fetch(apiUrl);
+    const arrayBuffer = await response.arrayBuffer();
+    const base64Image = Buffer.from(arrayBuffer).toString('base64');
 
-      // Font yükle
-      const font = await Jimp.loadFont(Jimp.FONT_SANS_32_WHITE);
-
-      const textWidth = Jimp.measureText(font, textToWrite);
-      const textHeight = Jimp.measureTextHeight(font, textToWrite, jimpImage.getWidth());
-
-      const padding = 25;
-      const x = jimpImage.getWidth() - textWidth - padding;
-      const y = jimpImage.getHeight() - textHeight - padding;
-
-      // Yazı arka planı için koyu kutucuk
-      const overlay = new Jimp(textWidth + 20, textHeight + 10, 0x00000088);
-      jimpImage.composite(overlay, Math.max(10, x - 10), Math.max(10, y - 5));
-
-      // Yazıyı yaz
-      jimpImage.print(font, Math.max(10, x), Math.max(10, y), textToWrite);
-
-      const processedBuffer = await jimpImage.getBufferAsync(Jimp.MIME_PNG);
-      const resultBase64 = processedBuffer.toString('base64');
-
-      return res.status(200).json({ imageBase64: resultBase64 });
-    }
-
-    // 2. DURUM: Sıfırdan Yapay Zeka ile Görsel Üretme
-    if (!prompt) {
-      return res.status(400).json({ error: 'Lütfen bir görsel tarifi (prompt) girin.' });
-    }
-
-    const seed = Math.floor(Math.random() * 1000000);
-    const encodedPrompt = encodeURIComponent(prompt);
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${seed}&width=1024&height=1024&nologo=true&model=flux`;
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-    const imageResponse = await fetch(imageUrl, { signal: controller.signal });
-    clearTimeout(timeoutId);
-
-    if (!imageResponse.ok) {
-      throw new Error(`Görsel üretme servisi yanıt vermedi (${imageResponse.status})`);
-    }
-
-    const arrayBuffer = await imageResponse.arrayBuffer();
-    const resultBase64 = Buffer.from(arrayBuffer).toString('base64');
-
-    return res.status(200).json({ imageBase64: resultBase64 });
-
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        imageBase64: `data:image/jpeg;base64,${base64Image}`
+      })
+    };
   } catch (error) {
-    console.error("Image API Error:", error);
-    return res.status(500).json({ error: `Görsel işlenirken hata oluştu: ${error.message}` });
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: error.message })
+    };
   }
 }
