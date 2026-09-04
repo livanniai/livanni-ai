@@ -32,31 +32,37 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 2. Gemini API İsteği (Güncel gemini-3.6-flash modeli ile)
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    // 2. Google Imagen Görsel Üretim API İsteği
+    const imagenResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: prompt || "Bu görselde ne görüyorsun?" },
-            ...(imageBase64 ? [{ inline_data: { mime_type: "image/jpeg", data: imageBase64 } }] : [])
-          ]
-        }]
+        instances: [
+          { prompt: prompt || "A high quality professional image" }
+        ],
+        parameters: {
+          sampleCount: 1,
+          aspectRatio: "1:1",
+          outputMimeType: "image/jpeg"
+        }
       })
     });
-    
-    const data = await response.json();
+
+    const data = await imagenResponse.json();
     if (data.error) throw new Error(data.error.message);
 
-    const aiResponseText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Yanıt alınamadı.";
+    // Üretilen görselin base64 verisini alıyoruz
+    const generatedImageBase64 = data.predictions?.[0]?.bytesBase64Encoded;
+    if (!generatedImageBase64) {
+      throw new Error("Görsel verisi alınamadı.");
+    }
 
     // 3. Görsel Kullanımını 1 Arttır
     await supabase.rpc('increment_image_usage', { user_id: userId });
 
-    res.status(200).json({ reply: aiResponseText, imageBase64: aiResponseText });
+    res.status(200).json({ imageBase64: generatedImageBase64 });
 
   } catch (err) {
-    res.status(500).json({ error: 'Görsel işlenirken hata oluştu: ' + err.message });
+    res.status(500).json({ error: 'Görsel üretilirken hata oluştu: ' + err.message });
   }
 }
