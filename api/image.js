@@ -34,63 +34,45 @@ export default async function handler(req, res) {
   try {
     let base64Image = '';
 
-    // 🟢 DURUM 1: Kullanıcı Fotoğraf Yükledi ve Düzenleme İstedi (Image-to-Image)
     if (image) {
-      // Base64 verisinin başındaki "data:image/png;base64," kısmını temizle
+      // 🟢 DURUM 1: Fotoğraf Yüklendi -> Image-to-Image (Arka plan değiştirme, oda oluşturma, düzenleme)
       const cleanBase64 = image.includes(',') ? image.split(',')[1] : image;
 
-      // Gemini REST API Çağrısı (Vercel'deki GEMINI_API_KEY kullanılır)
-      const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      // Hugging Face üzerindeki Image-to-Image modeline gönderiyoruz
+      const response = await fetch(
+        "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-refiner-1.0",
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            Authorization: `Bearer ${process.env.HF_ACCESS_TOKEN}`,
+            "Content-Type": "application/json",
+          },
+          method: "POST",
           body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    inline_data: {
-                      mime_type: 'image/jpeg',
-                      data: cleanBase64
-                    }
-                  },
-                  {
-                    text: `Edit this image according to this user prompt: "${prompt}". Maintain original composition and object structures unless asked to remove or modify. Return only the edited image.`
-                  }
-                ]
-              }
-            ],
-            generationConfig: {
-              responseMimeType: "image/jpeg"
+            inputs: cleanBase64,
+            parameters: {
+              prompt: prompt || "placed in a modern living room background, high quality",
+              strength: 0.65 // 0.65 seviyesi ana objeyi korur, arka planı prompt'a göre yeniden çizer
             }
-          })
+          }),
         }
       );
 
-      if (!geminiRes.ok) {
-        const errData = await geminiRes.text();
-        throw new Error(`Gemini API Hatası: ${errData}`);
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Görsel düzenleme servisi hatası: ${errText}`);
       }
 
-      const data = await geminiRes.json();
-      
-      // Gemini'dan gelen görsel verisini alma
-      const imagePart = data.candidates?.[0]?.content?.parts?.find(p => p.inline_data);
-      if (imagePart && imagePart.inline_data) {
-        base64Image = imagePart.inline_data.data;
-      } else {
-        throw new Error('Gemini görsel çıktısı üretemedi.');
-      }
+      const arrayBuffer = await response.arrayBuffer();
+      base64Image = Buffer.from(arrayBuffer).toString('base64');
 
     } else {
-      // 🔵 DURUM 2: Fotoğraf Yok, Sıfırdan Çiz (Text-to-Image) -> Pollinations AI veya Gemini
+      // 🔵 DURUM 2: Fotoğraf Yok -> Sıfırdan Resim Çiz (Text-to-Image)
       const randomSeed = Math.floor(Math.random() * 10000000);
-      const cleanPrompt = encodeURIComponent(prompt || "A modern furniture design");
-      const finalImageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=1024&height=1024&nologo=true&seed=${randomSeed}&model=flux`;
+      const encodedPrompt = encodeURIComponent(prompt || "A modern furniture design in a luxury room");
+      const finalImageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true&seed=${randomSeed}&model=flux`;
 
       const imageRes = await fetch(finalImageUrl);
-      if (!imageRes.ok) throw new Error('Görsel servisi yanıt vermedi.');
+      if (!imageRes.ok) throw new Error('Görsel üretme servisi yanıt vermedi.');
 
       const arrayBuffer = await imageRes.arrayBuffer();
       base64Image = Buffer.from(arrayBuffer).toString('base64');
@@ -102,7 +84,7 @@ export default async function handler(req, res) {
     res.status(200).json({ imageBase64: base64Image });
 
   } catch (err) {
-    console.error("Görsel İşleme Hatası:", err.message);
+    console.error("Görsel İşleme Hatası:", err);
     res.status(500).json({ error: 'Görsel işlenirken bir hata oluştu: ' + err.message });
   }
 }
