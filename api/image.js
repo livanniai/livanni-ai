@@ -17,7 +17,6 @@ export default async function handler(req, res) {
   }
 
   const userId = user.id;
-  // Arayüzden gelen 'prompt' (metin) ve 'image' (varsa yüklenen fotoğraf URL'si veya base64)
   const { prompt, image } = req.body;
 
   // 2. Supabase Limit Kontrolü
@@ -33,44 +32,77 @@ export default async function handler(req, res) {
   }
 
   try {
-    const randomSeed = Math.floor(Math.random() * 10000000);
-    let finalImageUrl = '';
+    let base64Image = '';
 
-    // --- KONTROL BÖLÜMÜ ---
+    // 🟢 DURUM 1: Kullanıcı Fotoğraf Yükledi ve Düzenleme İstedi (Image-to-Image)
     if (image) {
-      // 🟢 DURUM 1: Kullanıcı Fotoğraf Yükledi (Image-to-Image)
-      // Yüklenen fotoğrafı ve kullanıcının isteğini yapay zekaya birlikte gönderiyoruz
-      const cleanPrompt = encodeURIComponent(`${prompt}, keep original composition, add text or edit`);
-      const encodedImageUrl = encodeURIComponent(image);
+      // Base64 verisinin başındaki "data:image/png;base64," kısmını temizle
+      const cleanBase64 = image.includes(',') ? image.split(',')[1] : image;
+
+      // Gemini REST API Çağrısı (Vercel'deki GEMINI_API_KEY kullanılır)
+      const geminiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    inline_data: {
+                      mime_type: 'image/jpeg',
+                      data: cleanBase64
+                    }
+                  },
+                  {
+                    text: `Edit this image according to this user prompt: "${prompt}". Maintain original composition and object structures unless asked to remove or modify. Return only the edited image.`
+                  }
+                ]
+              }
+            ],
+            generationConfig: {
+              responseMimeType: "image/jpeg"
+            }
+          })
+        }
+      );
+
+      if (!geminiRes.ok) {
+        const errData = await geminiRes.text();
+        throw new Error(`Gemini API Hatası: ${errData}`);
+      }
+
+      const data = await geminiRes.json();
       
-      // Fotoğraflı düzenleme bağlantısı
-      finalImageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?image=${encodedImageUrl}&width=1024&height=1024&nologo=true&seed=${randomSeed}&model=flux`;
+      // Gemini'dan gelen görsel verisini alma
+      const imagePart = data.candidates?.[0]?.content?.parts?.find(p => p.inline_data);
+      if (imagePart && imagePart.inline_data) {
+        base64Image = imagePart.inline_data.data;
+      } else {
+        throw new Error('Gemini görsel çıktısı üretemedi.');
+      }
 
     } else {
-      // 🔵 DURUM 2: Fotoğraf Yok, Sıfırdan Resim Çiz (Text-to-Image)
-      const cleanPrompt = encodeURIComponent(prompt || "A futuristic modern furniture design");
-      
-      // Sıfırdan resim çizme bağlantısı
-      finalImageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=1024&height=1024&nologo=true&seed=${randomSeed}&model=flux`;
-    }
+      // 🔵 DURUM 2: Fotoğraf Yok, Sıfırdan Çiz (Text-to-Image) -> Pollinations AI veya Gemini
+      const randomSeed = Math.floor(Math.random() * 10000000);
+      const cleanPrompt = encodeURIComponent(prompt || "A modern furniture design");
+      const finalImageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=1024&height=1024&nologo=true&seed=${randomSeed}&model=flux`;
 
-    // Görseli indirip Base64 formatına çevirme
-    const imageRes = await fetch(finalImageUrl);
-    
-    if (!imageRes.ok) {
-      throw new Error('Görsel servisi yanıt vermedi.');
-    }
+      const imageRes = await fetch(finalImageUrl);
+      if (!imageRes.ok) throw new Error('Görsel servisi yanıt vermedi.');
 
-    const arrayBuffer = await imageRes.arrayBuffer();
-    const base64Image = Buffer.from(arrayBuffer).toString('base64');
+      const arrayBuffer = await imageRes.arrayBuffer();
+      base64Image = Buffer.from(arrayBuffer).toString('base64');
+    }
 
     // 3. Kullanım Limitini 1 Arttır
     await supabase.rpc('increment_image_usage', { user_id: userId });
 
-    // Başarılı sonucu döndür
     res.status(200).json({ imageBase64: base64Image });
 
   } catch (err) {
+    console.error("Görsel İşleme Hatası:", err.message);
     res.status(500).json({ error: 'Görsel işlenirken bir hata oluştu: ' + err.message });
   }
 }
