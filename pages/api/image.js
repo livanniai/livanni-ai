@@ -1,3 +1,13 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: "10mb",
+    },
+  },
+};
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Sadece POST istekleri kabul edilir." });
@@ -7,44 +17,39 @@ export default async function handler(req, res) {
     const { prompt, image, imageBase64 } = req.body;
     const inputImage = image || imageBase64;
 
-    if (!prompt && !inputImage) {
-      return res.status(400).json({ error: "Lütfen bir metin (prompt) veya görsel girin." });
+    if (!inputImage) {
+      return res.status(400).json({ error: "Lütfen düzenlenmesini istediğiniz görseli yükleyin." });
     }
 
-    // Mobilya ve Kalite Odaklı Otomatik İngilizce İyileştirici Ekip
-    let finalPrompt = prompt || "modern furniture in a beautiful interior design background, 8k resolution, professional photography";
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    // Türkçe karakter ve genel detay iyileştirmesi
-    finalPrompt = `${finalPrompt}, highly detailed, photorealistic, studio lighting, 4k resolution`;
+    // Base64 verisini temizleme
+    const cleanBase64 = inputImage.replace(/^data:image\/(png|jpeg|webp);base64,/, "");
 
-    // Rastgele tohum (seed) üreterek her defasında farklı ve özgün resim basmasını sağlıyoruz
-    const seed = Math.floor(Math.random() * 999999);
-    
-    // Pollinations FLUX Engine Endpoint
-    const encodedPrompt = encodeURIComponent(finalPrompt);
-    let imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&model=flux&nologo=true&seed=${seed}`;
+    const imagePart = {
+      inlineData: {
+        data: cleanBase64,
+        mimeType: "image/jpeg"
+      },
+    };
 
-    // Pollinations servisine istek atıyoruz
-    const response = await fetch(imageUrl);
+    const userPrompt = prompt || "Bu mobilyayı koruyarak arka planını modern, lüks bir salon stüdyo ortamına çevir.";
 
-    if (!response.ok) {
-      throw new Error(`Görsel üretici sunucusu hata döndürdü: ${response.statusText}`);
-    }
+    const result = await model.generateContent([
+      userPrompt,
+      imagePart
+    ]);
 
-    // Gelen resmi arrayBuffer olarak alıp Base64 formatına dönüştürüyoruz
-    const arrayBuffer = await response.arrayBuffer();
-    const base64Image = Buffer.from(arrayBuffer).toString("base64");
-    const resultBase64 = `data:image/jpeg;base64,${base64Image}`;
+    const response = await result.response;
+    const textResponse = response.text();
 
-    return res.status(200).json({ 
-      imageBase64: resultBase64,
-      image: resultBase64 
+    return res.status(200).json({
+      reply: textResponse
     });
 
   } catch (error) {
-    console.error("Görsel Üretim Hatası:", error);
-    return res.status(500).json({ 
-      error: "Görsel üretilirken bir hata oluştu: " + error.message 
-    });
+    console.error("Görsel İşleme Hatası:", error);
+    return res.status(500).json({ error: "İşlem sırasında bir hata oluştu: " + error.message });
   }
 }
