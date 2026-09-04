@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "@napi-rs/canvas": "^0.1.52",
-    "@supabase/supabase-js": "^2.45.0"
+    "@supabase/supabase-js": "^2.45.0",
+    "jimp": "^0.22.12"
   },
   "scripts": {
     "dev": "vercel dev"
