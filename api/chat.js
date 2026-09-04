@@ -49,7 +49,7 @@ export default async function handler(req, res) {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: "openai/gpt-oss-120b", // Groq'un güncel standart desteklenen ana modeli
+          model: "openai/gpt-oss-120b",
           messages: messages.map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content }))
         })
       });
@@ -58,7 +58,8 @@ export default async function handler(req, res) {
       aiResponseText = data.choices[0].message.content;
     } 
     else {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      // Güncel Gemini modeli
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
