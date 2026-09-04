@@ -214,11 +214,14 @@ async function onLoggedIn(session) {
 }
 
 async function refreshLimit() {
-  if (!currentSession) return;
+  const sessionData = await supabaseClient.auth.getSession();
+  const activeUser = sessionData.data.session?.user || currentSession?.user;
+  if (!activeUser) return;
+
   const { data, error } = await supabaseClient
     .from("user_limits")
     .select("usage_today, daily_limit")
-    .eq("id", currentSession.user.id)
+    .eq("id", activeUser.id)
     .single();
   if (!error && data) {
     document.getElementById("limitBadge").textContent = `Limit: ${data.usage_today}/${data.daily_limit}`;
@@ -229,7 +232,7 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
   await supabaseClient.auth.signOut();
   currentSession = null;
   sessions = [];
-  localStorage.removeItem("livanni_sessions");
+  localStorage.clear();
   authScreen.classList.remove("hidden");
 });
 
@@ -250,15 +253,16 @@ const chatHistoryList = document.getElementById("chatHistoryList");
 const tabChat = document.getElementById("tab-chat");
 const tabImage = document.getElementById("tab-image");
 
-// Sohbetleri Supabase'den (ve yedek olarak localStorage'dan) yükle
 async function loadUserChats() {
-  if (!currentSession) return;
+  const sessionData = await supabaseClient.auth.getSession();
+  const activeUser = sessionData.data.session?.user || currentSession?.user;
+  if (!activeUser) return;
 
   try {
     const { data, error } = await supabaseClient
       .from("chats")
       .select("*")
-      .eq("user_id", currentSession.user.id)
+      .eq("user_id", activeUser.id)
       .order("updated_at", { ascending: false });
 
     if (!error && data && data.length > 0) {
@@ -268,17 +272,16 @@ async function loadUserChats() {
         history: item.history
       }));
     } else {
-      // Supabase'de yoksa localStorage'a bak
-      const local = JSON.parse(localStorage.getItem("livanni_sessions_" + currentSession.user.id));
+      const local = JSON.parse(localStorage.getItem("livanni_sessions_" + activeUser.id));
       if (local && local.length > 0) {
         sessions = local;
-        // Sunucuya senkronize et
         for (let s of sessions) {
-          await supabaseClient.from("chats").insert({ user_id: currentSession.user.id, title: s.title, history: s.history });
+          await supabaseClient.from("chats").insert({ user_id: activeUser.id, title: s.title, history: s.history });
         }
       } else {
         sessions = [];
         await createNewChatInDB("Yeni Sohbet", []);
+        return;
       }
     }
   } catch (e) {
@@ -293,15 +296,16 @@ async function loadUserChats() {
 }
 
 async function saveState() {
-  if (!currentSession) return;
-  // LocalStorage yedekleme
-  localStorage.setItem("livanni_sessions_" + currentSession.user.id, JSON.stringify(sessions));
+  const sessionData = await supabaseClient.auth.getSession();
+  const activeUser = sessionData.data.session?.user || currentSession?.user;
+  if (!activeUser) return;
+
+  localStorage.setItem("livanni_sessions_" + activeUser.id, JSON.stringify(sessions));
   
   const active = sessions[currentSessionIndex];
   if (!active) return;
 
   if (active.id) {
-    // Veritabanındaki sohbeti güncelle
     await supabaseClient
       .from("chats")
       .update({ title: active.title, history: active.history, updated_at: new Date() })
@@ -310,10 +314,13 @@ async function saveState() {
 }
 
 async function createNewChatInDB(title, history) {
-  if (!currentSession) return;
+  const sessionData = await supabaseClient.auth.getSession();
+  const activeUser = sessionData.data.session?.user || currentSession?.user;
+  if (!activeUser) return;
+
   const { data, error } = await supabaseClient
     .from("chats")
-    .insert({ user_id: currentSession.user.id, title, history })
+    .insert({ user_id: activeUser.id, title, history })
     .select()
     .single();
 
@@ -441,17 +448,23 @@ async function handleSend() {
   const text = input.value.trim();
   if (!text) return;
 
-  if (!currentSession) {
-    const { data } = await supabaseClient.auth.getSession();
-    if (data.session) {
-      currentSession = data.session;
-    } else {
-      authScreen.classList.remove("hidden");
-      return;
-    }
+  // Her istekte oturumu tazeleyerek kontrol et
+  const sessionCheck = await supabaseClient.auth.getSession();
+  const activeSessionToken = sessionCheck.data.session;
+  
+  if (!activeSessionToken) {
+    authScreen.classList.remove("hidden");
+    return;
+  }
+  currentSession = activeSessionToken;
+
+  if (sessions.length === 0) {
+    await createNewChatInDB(text.length > 20 ? text.substring(0, 20) + "..." : text, []);
   }
 
   const activeSession = sessions[currentSessionIndex];
+  if (!activeSession) return;
+
   if (activeSession.history.length === 0) {
     activeSession.title = text.length > 20 ? text.substring(0, 20) + "..." : text;
   }
