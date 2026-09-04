@@ -26,11 +26,6 @@
   .new-chat-btn { background: var(--surface-hover); color: var(--text); border: 1px solid var(--border); padding: 10px 16px; border-radius: 24px; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 8px; width: 100%; font-weight: 500; justify-content: center; transition: background 0.2s; }
   .new-chat-btn:hover { background: var(--border); }
 
-  /* Model & Mod Seçim Alanı */
-  .model-selector { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
-  .model-selector label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-  .model-select { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-size: 13px; outline: none; cursor: pointer; }
-
   .menu-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
   .menu-item { padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--text-muted); display: flex; align-items: center; justify-content: space-between; }
   .menu-item:hover, .menu-item.active { background: var(--surface-hover); color: var(--text); }
@@ -59,6 +54,9 @@
 
   /* Giriş Kutusu */
   .input-container { background: var(--surface); border: 1px solid var(--border); border-radius: 24px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+  .input-top-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(60, 64, 67, 0.3); padding-bottom: 6px; margin-bottom: 4px; }
+  .model-inline-select { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 4px 10px; border-radius: 6px; font-size: 12px; outline: none; cursor: pointer; }
+  
   .input-row { display: flex; align-items: flex-end; gap: 10px; }
   textarea { flex: 1; background: transparent; border: none; color: var(--text); font-size: 14px; outline: none; resize: none; max-height: 120px; font-family: inherit; padding-bottom: 6px; }
   
@@ -100,18 +98,10 @@
   </div>
 </div>
 
-<!-- Sol Menü -->
+<!-- Sol Menü (Model seçici kaldırıldı) -->
 <aside>
   <div class="brand">✨ Livanni AI</div>
   <button class="new-chat-btn" id="newChatBtn">＋ Yeni Sohbet</button>
-  
-  <div class="model-selector">
-    <label>Yapay Zeka Modeli</label>
-    <select id="modelSelect" class="model-select">
-      <option value="gemini">Gemini</option>
-      <option value="llama">Llama</option>
-    </select>
-  </div>
 
   <div style="font-size: 11px; color: var(--text-muted); margin-top: 15px; text-transform: uppercase; letter-spacing: 0.5px;">Sohbet Geçmişi</div>
   <div class="menu-list" id="chatHistoryList"></div>
@@ -141,6 +131,15 @@
     </div>
 
     <div class="input-container">
+      <!-- Sohbet İçinden Model Seçim Alanı -->
+      <div class="input-top-row" id="modelSelectRow">
+        <span style="font-size: 11px; color: var(--text-muted);">Aktif Model:</span>
+        <select id="modelSelect" class="model-inline-select">
+          <option value="gemini">Gemini</option>
+          <option value="llama">Llama</option>
+        </select>
+      </div>
+
       <div id="filePreviewContainer" style="display:none; padding: 4px 8px;"></div>
       <div class="input-row">
         <input type="file" id="fileInput" style="display: none;" accept="image/*" />
@@ -239,7 +238,6 @@ async function refreshLimit() {
   if (!error && data) {
     document.getElementById("limitBadge").textContent = `Limit: ${data.chat_usage_today}/${data.daily_chat_limit}`;
   } else {
-    // Alternatif sütun adları ihtimaline karşı ikincil kontrol
     const { data: altData } = await supabaseClient
       .from("user_limits")
       .select("*")
@@ -274,6 +272,7 @@ const input = document.getElementById("input");
 const sendBtn = document.getElementById("sendBtn");
 const statusEl = document.getElementById("status");
 const modelSelect = document.getElementById("modelSelect");
+const modelSelectRow = document.getElementById("modelSelectRow");
 const chatHistoryList = document.getElementById("chatHistoryList");
 const tabChat = document.getElementById("tab-chat");
 const tabImage = document.getElementById("tab-image");
@@ -489,6 +488,7 @@ tabChat.addEventListener("click", () => {
   tabChat.classList.add("active");
   tabImage.classList.remove("active");
   input.placeholder = "Livanni AI'a bir şeyler sorun...";
+  modelSelectRow.style.display = "flex";
   renderMessages();
 });
 
@@ -497,6 +497,7 @@ tabImage.addEventListener("click", () => {
   tabImage.classList.add("active");
   tabChat.classList.remove("active");
   input.placeholder = "Nasıl bir görsel üretmemi istersin?";
+  modelSelectRow.style.display = "none";
   renderMessages();
 });
 
