@@ -17,7 +17,10 @@ export default async function handler(req, res) {
   }
 
   const userId = user.id;
-  const { prompt, image } = req.body;
+
+  // Frontend'den gelebilecek farklı değişken isimlerini (image, selectedImage, imageData) tek tek kontrol ediyoruz
+  const prompt = req.body.prompt;
+  const image = req.body.image || req.body.selectedImage || req.body.imageData || req.body.file;
 
   // 2. Supabase Limit Kontrolü
   const { data: userLimit, error } = await supabase
@@ -31,22 +34,20 @@ export default async function handler(req, res) {
     return res.status(429).json({ error: 'Günlük görsel işleme limitinize ulaştınız.' });
   }
 
-  // 3. Fotoğraf Yüklenmediyse Engelle
+  // 3. Fotoğraf Yüklenmediyse Kesin Hata Ver (Pollinations KESİNLİKLE YOK)
   if (!image) {
-    return res.status(400).json({ error: 'Lütfen düzenlemek istediğiniz fotoğrafı yükleyin.' });
+    return res.status(400).json({ error: 'Düzenlenecek resim backend tarafına ulaşmadı. Lütfen resmi tekrar yükleyin.' });
   }
 
-  // 4. Vercel Token Kontrolü
+  // 4. HuggingFace Token Kontrolü
   if (!process.env.HF_ACCESS_TOKEN) {
-    return res.status(400).json({ 
-      error: 'Vercel ortamında HF_ACCESS_TOKEN bulunamadı.' 
-    });
+    return res.status(400).json({ error: 'Vercel ortamında HF_ACCESS_TOKEN bulunamadı.' });
   }
 
   try {
-    const cleanBase64 = image.includes(',') ? image.split(',')[1] : image;
+    const cleanBase64 = typeof image === 'string' && image.includes(',') ? image.split(',')[1] : image;
 
-    // Yüklenen fotoğrafı baz alan Hugging Face Img2Img Servisi
+    // Yüklenen fotoğrafı alıp Stable Diffusion ile düzenleyen kısım
     const response = await fetch(
       "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-refiner-1.0",
       {
@@ -58,8 +59,8 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           inputs: cleanBase64,
           parameters: {
-            prompt: prompt || "high quality background edit",
-            strength: 0.65 // Ana nesneyi/koltuğu korur, etrafı değiştirmesini sağlar
+            prompt: prompt || "high quality image edit",
+            strength: 0.65
           }
         }),
       }
@@ -67,19 +68,19 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       const errText = await response.text();
-      throw new Error(`Görsel işleme hatası: ${errText}`);
+      throw new Error(`HuggingFace İşleme Hatası: ${errText}`);
     }
 
     const arrayBuffer = await response.arrayBuffer();
     const base64Image = Buffer.from(arrayBuffer).toString('base64');
 
-    // 5. Limit Arttır
+    // Limit Arttır
     await supabase.rpc('increment_image_usage', { user_id: userId });
 
     res.status(200).json({ imageBase64: base64Image });
 
   } catch (err) {
-    console.error("Görsel İşleme Hatası:", err.message);
+    console.error("Hata Detayı:", err.message);
     res.status(500).json({ error: 'Görsel işlenirken bir hata oluştu: ' + err.message });
   }
 }
