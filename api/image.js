@@ -21,12 +21,15 @@ export default async function handler(req, res) {
 
     let response;
 
-    // 1. DURUM: Yüklenen Görseli Düzenleme (Image-to-Image)
+    // Bağlantı kopmalarını önlemek için zaman aşımı kontrolü (60 saniye)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+    // 1. DURUM: Resim Düzenleme (Image-to-Image)
     if (inputImage) {
       const cleanBase64 = inputImage.includes(',') ? inputImage.split(',')[1] : inputImage;
       const imageBuffer = Buffer.from(cleanBase64, 'base64');
 
-      // Img2Img için doğrudan desteklenen ve aktif model
       response = await fetch(
         "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5",
         {
@@ -36,10 +39,11 @@ export default async function handler(req, res) {
             "Content-Type": "image/png",
           },
           body: imageBuffer,
+          signal: controller.signal,
         }
       );
     } 
-    // 2. DURUM: Sıfırdan Görsel Üretme (Text-to-Image)
+    // 2. DURUM: Sıfırdan Resim Üretme (Text-to-Image)
     else {
       response = await fetch(
         "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell",
@@ -50,17 +54,19 @@ export default async function handler(req, res) {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ inputs: prompt }),
+          signal: controller.signal,
         }
       );
     }
 
+    clearTimeout(timeoutId);
+
     if (!response.ok) {
       const errorText = await response.text();
 
-      // Model yükleniyorsa 503 verir
       if (response.status === 503) {
         return res.status(503).json({ 
-          error: "Model şu an hazırlanıyor, lütfen 10-15 saniye sonra tekrar deneyin." 
+          error: "Model yükleniyor, lütfen 10-15 saniye sonra tekrar deneyin." 
         });
       }
 
@@ -74,6 +80,13 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error("Image API Error:", error);
+
+    if (error.name === 'AbortError') {
+      return res.status(504).json({ 
+        error: "İstek zaman aşımına uğradı. Hugging Face yanıt vermekte gecikti, lütfen tekrar deneyin." 
+      });
+    }
+
     return res.status(500).json({ 
       error: `Görsel işlenirken bir hata oluştu: ${error.message}` 
     });
