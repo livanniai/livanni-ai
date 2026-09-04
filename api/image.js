@@ -21,29 +21,30 @@ export default async function handler(req, res) {
 
     let response;
 
-    // Bağlantı kopmalarını önlemek için zaman aşımı kontrolü (60 saniye)
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
-
-    // 1. DURUM: Resim Düzenleme (Image-to-Image)
+    // 1. DURUM: Yüklenen Görseli Düzenleme (Image-to-Image / Inpainting)
     if (inputImage) {
       const cleanBase64 = inputImage.includes(',') ? inputImage.split(',')[1] : inputImage;
-      const imageBuffer = Buffer.from(cleanBase64, 'base64');
 
+      // Hugging Face JSON Formatlı Img2Img / Inpainting İsteği
       response = await fetch(
-        "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5",
+        "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-refiner-1.0",
         {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${token}`,
-            "Content-Type": "image/png",
+            "Content-Type": "application/json",
           },
-          body: imageBuffer,
-          signal: controller.signal,
+          body: JSON.stringify({
+            inputs: prompt || "add text livanni",
+            parameters: {
+              image: cleanBase64,
+              strength: 0.5
+            }
+          }),
         }
       );
     } 
-    // 2. DURUM: Sıfırdan Resim Üretme (Text-to-Image)
+    // 2. DURUM: Sıfırdan Görsel Üretme (Text-to-Image)
     else {
       response = await fetch(
         "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell",
@@ -54,20 +55,41 @@ export default async function handler(req, res) {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ inputs: prompt }),
-          signal: controller.signal,
         }
       );
     }
-
-    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorText = await response.text();
 
       if (response.status === 503) {
         return res.status(503).json({ 
-          error: "Model yükleniyor, lütfen 10-15 saniye sonra tekrar deneyin." 
+          error: "Model şu an hazırlanıyor (uyanıyor), lütfen 10 saniye sonra tekrar deneyin." 
         });
+      }
+
+      // Eğer SDXL Refiner 400 verirse alternatif hafif Img2Img modeline düş
+      if (inputImage && response.status === 400) {
+        const fallbackRes = await fetch(
+          "https://api-inference.huggingface.co/models/timbrooks/instruct-pix2pix",
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              inputs: prompt || "write livanni on image",
+              parameters: { image: inputImage.includes(',') ? inputImage.split(',')[1] : inputImage }
+            }),
+          }
+        );
+
+        if (fallbackRes.ok) {
+          const fbBuffer = await fallbackRes.arrayBuffer();
+          const fbBase64 = Buffer.from(fbBuffer).toString('base64');
+          return res.status(200).json({ imageBase64: fbBase64 });
+        }
       }
 
       throw new Error(`Hugging Face API Hatası (${response.status}): ${errorText}`);
@@ -80,13 +102,6 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error("Image API Error:", error);
-
-    if (error.name === 'AbortError') {
-      return res.status(504).json({ 
-        error: "İstek zaman aşımına uğradı. Hugging Face yanıt vermekte gecikti, lütfen tekrar deneyin." 
-      });
-    }
-
     return res.status(500).json({ 
       error: `Görsel işlenirken bir hata oluştu: ${error.message}` 
     });
