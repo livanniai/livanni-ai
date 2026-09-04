@@ -26,14 +26,16 @@
   .new-chat-btn { background: var(--surface-hover); color: var(--text); border: 1px solid var(--border); padding: 10px 16px; border-radius: 24px; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 8px; width: fit-content; font-weight: 500; }
   .new-chat-btn:hover { background: var(--border); }
 
-  /* Model Seçim Alanı */
+  /* Model & Mod Seçim Alanı */
   .model-selector { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
   .model-selector label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
   .model-select { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-size: 13px; outline: none; cursor: pointer; }
 
   .menu-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
-  .menu-item { padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .menu-item { padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--text-muted); display: flex; align-items: center; justify-content: space-between; }
   .menu-item:hover, .menu-item.active { background: var(--surface-hover); color: var(--text); }
+  .delete-chat { background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px; }
+  .delete-chat:hover { color: var(--error); background: rgba(242, 139, 130, 0.1); }
 
   .user-bar { border-top: 1px solid var(--border); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--text-muted); }
   .user-bar button { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 6px; cursor: pointer; }
@@ -42,6 +44,10 @@
   /* Ana İçerik Alanı */
   .main-container { flex: 1; display: flex; flex-direction: column; height: 100vh; background: var(--bg); position: relative; }
   header { padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 500; color: var(--text-muted); }
+  
+  .tabs { display: flex; gap: 6px; background: var(--surface); padding: 4px; border-radius: 20px; border: 1px solid var(--border); }
+  .tab { padding: 6px 14px; border-radius: 16px; border: none; background: transparent; cursor: pointer; font-size: 13px; color: var(--text-muted); font-weight: 500; }
+  .tab.active { background: var(--surface-hover); color: var(--text); }
 
   main { flex: 1; max-width: 800px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; padding: 0 20px 20px 20px; overflow: hidden; }
   .messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding-bottom: 20px; }
@@ -96,15 +102,13 @@
   <div class="model-selector">
     <label>Yapay Zeka Modeli</label>
     <select id="modelSelect" class="model-select">
-      <option value="gemini">Gemini Pro</option>
-      <option value="claude">Claude Sonnet</option>
+      <option value="gemini">Gemini</option>
+      <option value="llama">Llama</option>
     </select>
   </div>
 
   <div style="font-size: 11px; color: var(--text-muted); margin-top: 15px; text-transform: uppercase; letter-spacing: 0.5px;">Sohbet Geçmişi</div>
-  <div class="menu-list" id="chatHistoryList">
-    <div class="menu-item active" onclick="loadSession(0)">Aktif Sohbet</div>
-  </div>
+  <div class="menu-list" id="chatHistoryList"></div>
 
   <div class="user-bar">
     <div id="userEmail" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></div>
@@ -118,7 +122,10 @@
 <!-- Ana Ekran -->
 <div class="main-container">
   <header>
-    <div id="topTitle">Livanni AI Asistan</div>
+    <div class="tabs">
+      <button class="tab active" id="tab-chat">Sohbet</button>
+      <button class="tab" id="tab-image">Görsel Üret</button>
+    </div>
     <div id="status" style="font-size: 13px;">Hazır</div>
   </header>
 
@@ -145,7 +152,8 @@ const supabaseClient = window.supabase.createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpxd2Z1Y3FxYndyY2V2eG9oZGJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1NDAxNTMsImV4cCI6MjEwNDExNjE1M30.hG4TJz-xsjakB98KIOwnVzhm8xZkbJ_5WxmyCgR-HRI"
 );
 
-let sessions = [{ title: "Yeni Sohbet", history: [] }];
+let mode = "chat";
+let sessions = [];
 let currentSessionIndex = 0;
 let currentSession = null;
 
@@ -202,9 +210,11 @@ async function onLoggedIn(session) {
   authScreen.classList.add("hidden");
   document.getElementById("userEmail").textContent = session.user.email;
   await refreshLimit();
+  await loadUserChats();
 }
 
 async function refreshLimit() {
+  if (!currentSession) return;
   const { data, error } = await supabaseClient
     .from("user_limits")
     .select("usage_today, daily_limit")
@@ -218,11 +228,17 @@ async function refreshLimit() {
 document.getElementById("logoutBtn").addEventListener("click", async () => {
   await supabaseClient.auth.signOut();
   currentSession = null;
+  sessions = [];
+  localStorage.removeItem("livanni_sessions");
   authScreen.classList.remove("hidden");
 });
 
-supabaseClient.auth.getSession().then(({ data }) => {
-  if (data.session) onLoggedIn(data.session);
+supabaseClient.auth.getSession().then(async ({ data }) => {
+  if (data.session) {
+    await onLoggedIn(data.session);
+  } else {
+    authScreen.classList.remove("hidden");
+  }
 });
 
 const messagesEl = document.getElementById("messages");
@@ -231,18 +247,102 @@ const sendBtn = document.getElementById("sendBtn");
 const statusEl = document.getElementById("status");
 const modelSelect = document.getElementById("modelSelect");
 const chatHistoryList = document.getElementById("chatHistoryList");
+const tabChat = document.getElementById("tab-chat");
+const tabImage = document.getElementById("tab-image");
+
+// Sohbetleri Supabase'den (ve yedek olarak localStorage'dan) yükle
+async function loadUserChats() {
+  if (!currentSession) return;
+
+  try {
+    const { data, error } = await supabaseClient
+      .from("chats")
+      .select("*")
+      .eq("user_id", currentSession.user.id)
+      .order("updated_at", { ascending: false });
+
+    if (!error && data && data.length > 0) {
+      sessions = data.map(item => ({
+        id: item.id,
+        title: item.title,
+        history: item.history
+      }));
+    } else {
+      // Supabase'de yoksa localStorage'a bak
+      const local = JSON.parse(localStorage.getItem("livanni_sessions_" + currentSession.user.id));
+      if (local && local.length > 0) {
+        sessions = local;
+        // Sunucuya senkronize et
+        for (let s of sessions) {
+          await supabaseClient.from("chats").insert({ user_id: currentSession.user.id, title: s.title, history: s.history });
+        }
+      } else {
+        sessions = [];
+        await createNewChatInDB("Yeni Sohbet", []);
+      }
+    }
+  } catch (e) {
+    console.error("Sohbetler yüklenirken hata:", e);
+    sessions = [{ title: "Yeni Sohbet", history: [] }];
+  }
+
+  currentSessionIndex = 0;
+  saveState();
+  renderSidebar();
+  renderMessages();
+}
+
+async function saveState() {
+  if (!currentSession) return;
+  // LocalStorage yedekleme
+  localStorage.setItem("livanni_sessions_" + currentSession.user.id, JSON.stringify(sessions));
+  
+  const active = sessions[currentSessionIndex];
+  if (!active) return;
+
+  if (active.id) {
+    // Veritabanındaki sohbeti güncelle
+    await supabaseClient
+      .from("chats")
+      .update({ title: active.title, history: active.history, updated_at: new Date() })
+      .eq("id", active.id);
+  }
+}
+
+async function createNewChatInDB(title, history) {
+  if (!currentSession) return;
+  const { data, error } = await supabaseClient
+    .from("chats")
+    .insert({ user_id: currentSession.user.id, title, history })
+    .select()
+    .single();
+
+  if (!error && data) {
+    sessions.unshift({ id: data.id, title: data.title, history: data.history });
+  } else {
+    sessions.unshift({ title, history });
+  }
+  currentSessionIndex = 0;
+  saveState();
+  renderSidebar();
+  renderMessages();
+}
 
 function renderMessages() {
   messagesEl.innerHTML = "";
-  const currentHist = sessions[currentSessionIndex].history;
+  const currentHist = sessions[currentSessionIndex]?.history || [];
   if (currentHist.length === 0) {
-    messagesEl.innerHTML = `<div class="msg ai">Merhaba! Ben Livanni AI. Bugün sana nasıl yardımcı olabilirim?</div>`;
+    messagesEl.innerHTML = `<div class="msg ai">${mode === 'chat' ? 'Merhaba! Ben Livanni AI. Bugün sana nasıl yardımcı olabilirim?' : 'Görsel Stüdyo aktif. Üretmek istediğin görseli tarif et.'}</div>`;
     return;
   }
   currentHist.forEach(msg => {
     const div = document.createElement("div");
     div.className = "msg " + (msg.role === "user" ? "user" : "ai");
-    div.innerHTML = escapeHTML(msg.content);
+    if (msg.type === "image") {
+      div.innerHTML = `<div>Üretilen Görsel:</div><img src="data:image/png;base64,${msg.content}" />`;
+    } else {
+      div.innerHTML = escapeHTML(msg.content);
+    }
     messagesEl.appendChild(div);
   });
   messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -253,8 +353,26 @@ function renderSidebar() {
   sessions.forEach((s, index) => {
     const item = document.createElement("div");
     item.className = "menu-item" + (index === currentSessionIndex ? " active" : "");
-    item.textContent = s.title;
-    item.onclick = () => loadSession(index);
+    
+    const titleSpan = document.createElement("span");
+    titleSpan.style.flex = "1";
+    titleSpan.style.overflow = "hidden";
+    titleSpan.style.textOverflow = "ellipsis";
+    titleSpan.style.whiteSpace = "nowrap";
+    titleSpan.textContent = s.title;
+    titleSpan.onclick = () => loadSession(index);
+    item.appendChild(titleSpan);
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "delete-chat";
+    delBtn.textContent = "×";
+    delBtn.title = "Sohbeti Sil";
+    delBtn.onclick = (e) => {
+      e.stopPropagation();
+      deleteSession(index);
+    };
+    item.appendChild(delBtn);
+
     chatHistoryList.appendChild(item);
   });
 }
@@ -265,12 +383,44 @@ function loadSession(index) {
   renderSidebar();
 }
 
-document.getElementById("newChatBtn").addEventListener("click", () => {
-  sessions.unshift({ title: "Yeni Sohbet", history: [] });
-  currentSessionIndex = 0;
+async function deleteSession(index) {
+  const target = sessions[index];
+  if (target && target.id) {
+    await supabaseClient.from("chats").delete().eq("id", target.id);
+  }
+
+  sessions.splice(index, 1);
+  if (sessions.length === 0) {
+    await createNewChatInDB("Yeni Sohbet", []);
+  } else {
+    if (currentSessionIndex >= sessions.length) {
+      currentSessionIndex = sessions.length - 1;
+    }
+    saveState();
+  }
   renderMessages();
   renderSidebar();
+}
+
+document.getElementById("newChatBtn").addEventListener("click", async () => {
+  await createNewChatInDB("Yeni Sohbet", []);
   statusEl.textContent = "Hazır";
+});
+
+tabChat.addEventListener("click", () => {
+  mode = "chat";
+  tabChat.classList.add("active");
+  tabImage.classList.remove("active");
+  input.placeholder = "Livanni AI'a bir şeyler sorun...";
+  renderMessages();
+});
+
+tabImage.addEventListener("click", () => {
+  mode = "image";
+  tabImage.classList.add("active");
+  tabChat.classList.remove("active");
+  input.placeholder = "Nasıl bir görsel üretmemi istersin?";
+  renderMessages();
 });
 
 input.addEventListener("input", function() {
@@ -289,41 +439,68 @@ sendBtn.addEventListener("click", handleSend);
 
 async function handleSend() {
   const text = input.value.trim();
-  if (!text || !currentSession) return;
+  if (!text) return;
+
+  if (!currentSession) {
+    const { data } = await supabaseClient.auth.getSession();
+    if (data.session) {
+      currentSession = data.session;
+    } else {
+      authScreen.classList.remove("hidden");
+      return;
+    }
+  }
 
   const activeSession = sessions[currentSessionIndex];
   if (activeSession.history.length === 0) {
     activeSession.title = text.length > 20 ? text.substring(0, 20) + "..." : text;
-    renderSidebar();
   }
 
-  activeSession.history.push({ role: "user", content: text });
+  activeSession.history.push({ role: "user", content: text, type: "text" });
+  await saveState();
   renderMessages();
+  renderSidebar();
+  
   input.value = "";
   input.style.height = "auto";
   sendBtn.disabled = true;
   
   const selectedModel = modelSelect.value;
-  statusEl.textContent = selectedModel === "gemini" ? "Gemini düşünüyor..." : "Claude düşünüyor...";
+  statusEl.textContent = mode === "chat" ? `${selectedModel === "gemini" ? "Gemini" : "Llama"} düşünüyor...` : "Görsel üretiliyor...";
 
   try {
     const authHeader = { Authorization: `Bearer ${currentSession.access_token}` };
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeader },
-      body: JSON.stringify({ messages: activeSession.history, model: selectedModel })
-    });
     
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    
-    activeSession.history.push({ role: "assistant", content: data.reply });
+    if (mode === "chat") {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeader },
+        body: JSON.stringify({ messages: activeSession.history, model: selectedModel })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      
+      activeSession.history.push({ role: "assistant", content: data.reply, type: "text" });
+    } else {
+      const res = await fetch("/api/image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeader },
+        body: JSON.stringify({ prompt: text })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      
+      activeSession.history.push({ role: "assistant", content: data.imageBase64, type: "image" });
+      await refreshLimit();
+    }
+
+    await saveState();
     renderMessages();
     statusEl.textContent = "Hazır";
-    await refreshLimit();
   } catch (err) {
     statusEl.textContent = "Hata oluştu";
-    activeSession.history.push({ role: "assistant", content: "Üzgünüm, bir hata oluştu: " + err.message });
+    activeSession.history.push({ role: "assistant", content: "Üzgünüm, bir hata oluştu: " + err.message, type: "text" });
+    await saveState();
     renderMessages();
   } finally {
     sendBtn.disabled = false;
