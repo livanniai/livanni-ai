@@ -1,86 +1,124 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const supabase = createClient(
+  process.env.SUPABASE_URL || "https://zqwfucqqbwrcevxohdby.supabase.co",
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
+);
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).send('Sadece POST istekleri kabul edilir');
-
-  // 1. Kullanıcı Token Doğrulama
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: 'Yetkilendirme tokenı bulunamadı.' });
-
-  const token = authHeader.replace('Bearer ', '');
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-  if (authError || !user) {
-    return res.status(401).json({ error: 'Kullanıcı bulunamadı.' });
-  }
-
-  const userId = user.id;
-
-  // Frontend'den gelebilecek farklı değişken isimlerini (image, selectedImage, imageData) tek tek kontrol ediyoruz
-  const prompt = req.body.prompt;
-  const image = req.body.image || req.body.selectedImage || req.body.imageData || req.body.file;
-
-  // 2. Supabase Limit Kontrolü
-  const { data: userLimit, error } = await supabase
-    .from('user_limits')
-    .select('image_usage_today, daily_image_limit')
-    .eq('id', userId)
-    .single();
-
-  if (error || !userLimit) return res.status(401).json({ error: 'Kullanıcı limit bilgisi bulunamadı.' });
-  if (userLimit.image_usage_today >= userLimit.daily_image_limit) {
-    return res.status(429).json({ error: 'Günlük görsel işleme limitinize ulaştınız.' });
-  }
-
-  // 3. Fotoğraf Yüklenmediyse Kesin Hata Ver (Pollinations KESİNLİKLE YOK)
-  if (!image) {
-    return res.status(400).json({ error: 'Düzenlenecek resim backend tarafına ulaşmadı. Lütfen resmi tekrar yükleyin.' });
-  }
-
-  // 4. HuggingFace Token Kontrolü
-  if (!process.env.HF_ACCESS_TOKEN) {
-    return res.status(400).json({ error: 'Vercel ortamında HF_ACCESS_TOKEN bulunamadı.' });
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Sadece POST istekleri kabul edilir.' });
   }
 
   try {
-    const cleanBase64 = typeof image === 'string' && image.includes(',') ? image.split(',')[1] : image;
+    const { prompt, image, imageBase64 } = req.body;
+    const inputImage = image || imageBase64;
 
-    // Yüklenen fotoğrafı alıp Stable Diffusion ile düzenleyen kısım
-    const response = await fetch(
-      "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-refiner-1.0",
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.HF_ACCESS_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        method: "POST",
-        body: JSON.stringify({
-          inputs: cleanBase64,
-          parameters: {
-            prompt: prompt || "high quality image edit",
-            strength: 0.65
-          }
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`HuggingFace İşleme Hatası: ${errText}`);
+    if (!prompt) {
+      return res.status(400).json({ error: 'Prompt gereklidir.' });
     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    const base64Image = Buffer.from(arrayBuffer).toString('base64');
+    // EĞER RESİMLİ DÜZENLEME YAPILIYORSA
+    if (inputImage) {
+      // Base64 başlığını temizleyip standart Data URI formatına getiriyoruz
+      const cleanBase64 = inputImage.includes(',') ? inputImage.split(',')[1] : inputImage;
+      const formattedDataUri = `data:image/png;base64,${cleanBase64}`;
 
-    // Limit Arttır
-    await supabase.rpc('increment_image_usage', { user_id: userId });
+      // Replicate veya dış API isteği (Time-out süresini uzun tutmak için AbortController ekli)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 saniye zaman aşımı
 
-    res.status(200).json({ imageBase64: base64Image });
+      const response = await fetch("https://api.replicate.com/v1/predictions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Token ${process.env.REPLICATE_API_TOKEN}`,
+          "Content-Type": "application/json"
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          // img2img için uygun model seçimi
+          version: "39ed52f2a78e93213afbd9e240183188b0e1cecc301a55517b135865a2a22c1d", 
+          input: {
+            prompt: prompt,
+            image: formattedDataUri,
+            prompt_strength: 0.8
+          }
+        })
+      });
 
-  } catch (err) {
-    console.error("Hata Detayı:", err.message);
-    res.status(500).json({ error: 'Görsel işlenirken bir hata oluştu: ' + err.message });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Model API hatası: ${response.status} - ${errorText}`);
+      }
+
+      const prediction = await response.json();
+
+      // Sonuç çıktısını bekleme döngüsü (Polling)
+      let predictionResult = prediction;
+      while (predictionResult.status !== "succeeded" && predictionResult.status !== "failed") {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const checkRes = await fetch(predictionResult.urls.get, {
+          headers: { "Authorization": `Token ${process.env.REPLICATE_API_TOKEN}` }
+        });
+        predictionResult = await checkRes.json();
+      }
+
+      if (predictionResult.status === "failed") {
+        throw new Error("Görsel işleme modeli işlemi tamamlayamadı.");
+      }
+
+      // Üretilen çıktıyı Base64 olarak geri döndürme
+      const outputUrl = Array.isArray(predictionResult.output) ? predictionResult.output[0] : predictionResult.output;
+      const imgRes = await fetch(outputUrl);
+      const arrayBuffer = await imgRes.arrayBuffer();
+      const resultBase64 = Buffer.from(arrayBuffer).toString('base64');
+
+      return res.status(200).json({ imageBase64: resultBase64 });
+    }
+
+    // EĞER SADECE TEXT PROMPT İLE SIFIRDAN RESİM ÜRETİLİYORSA
+    const response = await fetch("https://api.replicate.com/v1/predictions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Token ${process.env.REPLICATE_API_TOKEN}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        version: "ac732df83cea7fff18b8472768c88ad041fa750ff7682a21affe81863cbe77e4", // SDXL Text-to-Image
+        input: { prompt: prompt }
+      })
+    });
+
+    const prediction = await response.json();
+    let predictionResult = prediction;
+
+    while (predictionResult.status !== "succeeded" && predictionResult.status !== "failed") {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const checkRes = await fetch(predictionResult.urls.get, {
+        headers: { "Authorization": `Token ${process.env.REPLICATE_API_TOKEN}` }
+      });
+      predictionResult = await checkRes.json();
+    }
+
+    if (predictionResult.status === "failed") {
+      throw new Error("Görsel üretimi başarısız oldu.");
+    }
+
+    const outputUrl = Array.isArray(predictionResult.output) ? predictionResult.output[0] : predictionResult.output;
+    const imgRes = await fetch(outputUrl);
+    const arrayBuffer = await imgRes.arrayBuffer();
+    const resultBase64 = Buffer.from(arrayBuffer).toString('base64');
+
+    return res.status(200).json({ imageBase64: resultBase64 });
+
+  } catch (error) {
+    console.error("Image API Error:", error);
+    return res.status(500).json({ 
+      error: error.name === 'AbortError' 
+        ? "Görsel işleme zaman aşımına uğradı. Lütfen daha küçük boyutlu bir resim deneyin." 
+        : `Görsel işlenirken bir hata oluştu: ${error.message}` 
+    });
   }
 }
