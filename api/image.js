@@ -9,31 +9,28 @@ export default async function handler(req, res) {
     const { prompt, image, imageBase64 } = req.body;
     const inputImage = image || imageBase64;
 
-    // 1. DURUM: Resim Üzerine "Livanni" Yazısı / Filigran Ekleme (Pure JS Canvas / Jimp)
+    // 1. DURUM: Resim Üzerine "Livanni" Yazısı / Filigran Ekleme
     if (inputImage) {
       const cleanBase64 = inputImage.includes(',') ? inputImage.split(',')[1] : inputImage;
       const imageBuffer = Buffer.from(cleanBase64, 'base64');
 
-      // Görseli yükle
       const jimpImage = await Jimp.read(imageBuffer);
 
-      // Metin için font yükle
-      const font = await Jimp.loadFont(Jimp.FONT_SANS_64_WHITE);
+      // Vercel serverless dosya sistemi hatasını engellemek için fontu CDN üzerinden çekiyoruz
+      const fontUrl = 'https://unpkg.com/@jimp/plugin-print@0.22.10/fonts/open-sans/open-sans-64-white/open-sans-64-white.fnt';
+      const font = await Jimp.loadFont(fontUrl);
 
       const textToWrite = prompt && !prompt.toLowerCase().includes('üzerine') ? prompt : 'Livanni';
 
-      // Metin genişliğini hesapla ve sağ alt köşeye hizala
       const textWidth = Jimp.measureText(font, textToWrite);
       const textHeight = Jimp.measureTextHeight(font, textToWrite, jimpImage.getWidth());
 
-      const padding = 20;
+      const padding = 30;
       const x = jimpImage.getWidth() - textWidth - padding;
       const y = jimpImage.getHeight() - textHeight - padding;
 
-      // Metni yaz
       jimpImage.print(font, Math.max(10, x), Math.max(10, y), textToWrite);
 
-      // Buffer'a çevir ve Base64 dön
       const processedBuffer = await jimpImage.getBufferAsync(Jimp.MIME_PNG);
       const resultBase64 = processedBuffer.toString('base64');
 
