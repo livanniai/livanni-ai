@@ -5,7 +5,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Sadece POST istekleri kabul edilir');
 
-  // Token'ı alıp kullanıcıyı doğrulayalım
+  // 1. Kullanıcı Token Doğrulama
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: 'Yetkilendirme tokenı bulunamadı.' });
 
@@ -17,9 +17,10 @@ export default async function handler(req, res) {
   }
 
   const userId = user.id;
-  const { prompt } = req.body;
+  // Arayüzden gelen 'prompt' (metin) ve 'image' (varsa yüklenen fotoğraf URL'si veya base64)
+  const { prompt, image } = req.body;
 
-  // 1. Supabase Limit Kontrolü
+  // 2. Supabase Limit Kontrolü
   const { data: userLimit, error } = await supabase
     .from('user_limits')
     .select('image_usage_today, daily_image_limit')
@@ -32,21 +33,44 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 2. Doğrudan görsel üreten servis üzerinden resmi oluşturalım
-    const encodedPrompt = encodeURIComponent(prompt || "A futuristic modern furniture design");
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true`;
+    const randomSeed = Math.floor(Math.random() * 10000000);
+    let finalImageUrl = '';
 
-    // Görseli indirip base64 formatına çevirelim ki arayüzün beklediği formata tam uysun
-    const imageRes = await fetch(imageUrl);
+    // --- KONTROL BÖLÜMÜ ---
+    if (image) {
+      // 🟢 DURUM 1: Kullanıcı Fotoğraf Yükledi (Image-to-Image)
+      // Yüklenen fotoğrafı ve kullanıcının isteğini yapay zekaya birlikte gönderiyoruz
+      const cleanPrompt = encodeURIComponent(`${prompt}, keep original composition, add text or edit`);
+      const encodedImageUrl = encodeURIComponent(image);
+      
+      // Fotoğraflı düzenleme bağlantısı
+      finalImageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?image=${encodedImageUrl}&width=1024&height=1024&nologo=true&seed=${randomSeed}&model=flux`;
+
+    } else {
+      // 🔵 DURUM 2: Fotoğraf Yok, Sıfırdan Resim Çiz (Text-to-Image)
+      const cleanPrompt = encodeURIComponent(prompt || "A futuristic modern furniture design");
+      
+      // Sıfırdan resim çizme bağlantısı
+      finalImageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=1024&height=1024&nologo=true&seed=${randomSeed}&model=flux`;
+    }
+
+    // Görseli indirip Base64 formatına çevirme
+    const imageRes = await fetch(finalImageUrl);
+    
+    if (!imageRes.ok) {
+      throw new Error('Görsel servisi yanıt vermedi.');
+    }
+
     const arrayBuffer = await imageRes.arrayBuffer();
     const base64Image = Buffer.from(arrayBuffer).toString('base64');
 
-    // 3. Görsel Kullanımını 1 Arttır
+    // 3. Kullanım Limitini 1 Arttır
     await supabase.rpc('increment_image_usage', { user_id: userId });
 
+    // Başarılı sonucu döndür
     res.status(200).json({ imageBase64: base64Image });
 
   } catch (err) {
-    res.status(500).json({ error: 'Görsel üretilirken hata oluştu: ' + err.message });
+    res.status(500).json({ error: 'Görsel işlenirken bir hata oluştu: ' + err.message });
   }
 }
