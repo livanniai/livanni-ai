@@ -1,11 +1,13 @@
--- Bu SQL kodunu Supabase panelinde "SQL Editor" kısmına yapıştırıp çalıştıracaksın.
 -- Kullanıcıların günlük kullanım hakkını ve limitini tutan tablo.
+-- Görsel için 10 limit, sohbet için 99999 (sınırsız) limit belirlendi.
 
 create table if not exists public.user_limits (
   id uuid references auth.users(id) primary key,
   email text not null,
-  daily_limit integer not null default 10,
-  usage_today integer not null default 0,
+  daily_image_limit integer not null default 10,
+  image_usage_today integer not null default 0,
+  daily_chat_limit integer not null default 99999,
+  chat_usage_today integer not null default 0,
   last_used_date date not null default current_date,
   is_admin boolean not null default false,
   created_at timestamp with time zone default now()
