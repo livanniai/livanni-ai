@@ -5,7 +5,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Sadece POST istekleri kabul edilir');
 
-  // Token'ı header'dan alıp kullanıcıyı doğrulayalım
+  // Token'ı alıp kullanıcıyı doğrulayalım
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: 'Yetkilendirme tokenı bulunamadı.' });
 
@@ -17,7 +17,7 @@ export default async function handler(req, res) {
   }
 
   const userId = user.id;
-  const { imageBase64, prompt } = req.body;
+  const { prompt } = req.body;
 
   // 1. Supabase Limit Kontrolü
   const { data: userLimit, error } = await supabase
@@ -32,31 +32,21 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 2. Panelin de desteklediği Gemini 3.6 Flash Model İsteği
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: prompt || "Bu görseli analiz et veya düzenle." },
-            ...(imageBase64 ? [{ inline_data: { mime_type: "image/jpeg", data: imageBase64 } }] : [])
-          ]
-        }]
-      })
-    });
-    
-    const data = await response.json();
-    if (data.error) throw new Error(data.error.message);
+    // 2. Doğrudan görsel üreten servis üzerinden resmi oluşturalım
+    const encodedPrompt = encodeURIComponent(prompt || "A futuristic modern furniture design");
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true`;
 
-    const aiResponseText = data.candidates?.[0]?.content?.parts?.[0]?.text || "İşlem tamamlandı.";
+    // Görseli indirip base64 formatına çevirelim ki arayüzün beklediği formata tam uysun
+    const imageRes = await fetch(imageUrl);
+    const arrayBuffer = await imageRes.arrayBuffer();
+    const base64Image = Buffer.from(arrayBuffer).toString('base64');
 
     // 3. Görsel Kullanımını 1 Arttır
     await supabase.rpc('increment_image_usage', { user_id: userId });
 
-    res.status(200).json({ reply: aiResponseText, imageBase64: aiResponseText });
+    res.status(200).json({ imageBase64: base64Image });
 
   } catch (err) {
-    res.status(500).json({ error: 'Görsel işlenirken hata oluştu: ' + err.message });
+    res.status(500).json({ error: 'Görsel üretilirken hata oluştu: ' + err.message });
   }
 }
