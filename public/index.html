@@ -23,7 +23,7 @@
   /* Sol Kenar Çubuğu */
   aside { width: 280px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 16px; gap: 12px; }
   .brand { font-size: 16px; font-weight: 500; display: flex; align-items: center; gap: 8px; padding: 8px; color: var(--text); }
-  .new-chat-btn { background: var(--surface-hover); color: var(--text); border: 1px solid var(--border); padding: 10px 16px; border-radius: 24px; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 8px; width: fit-content; font-weight: 500; }
+  .new-chat-btn { background: var(--surface-hover); color: var(--text); border: 1px solid var(--border); padding: 10px 16px; border-radius: 24px; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 8px; width: 100%; font-weight: 500; justify-content: center; transition: background 0.2s; }
   .new-chat-btn:hover { background: var(--border); }
 
   /* Model & Mod Seçim Alanı */
@@ -38,29 +38,35 @@
   .delete-chat:hover { color: var(--error); background: rgba(242, 139, 130, 0.1); }
 
   .user-bar { border-top: 1px solid var(--border); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--text-muted); }
-  .user-bar button { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+  .user-bar button { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 6px; cursor: pointer; width: 100%; }
   .user-bar button:hover { background: var(--surface-hover); }
 
   /* Ana İçerik Alanı */
   .main-container { flex: 1; display: flex; flex-direction: column; height: 100vh; background: var(--bg); position: relative; }
-  header { padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 500; color: var(--text-muted); }
+  header { padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 500; color: var(--text-muted); border-bottom: 1px solid rgba(60, 64, 67, 0.4); }
   
   .tabs { display: flex; gap: 6px; background: var(--surface); padding: 4px; border-radius: 20px; border: 1px solid var(--border); }
   .tab { padding: 6px 14px; border-radius: 16px; border: none; background: transparent; cursor: pointer; font-size: 13px; color: var(--text-muted); font-weight: 500; }
   .tab.active { background: var(--surface-hover); color: var(--text); }
 
-  main { flex: 1; max-width: 800px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; padding: 0 20px 20px 20px; overflow: hidden; }
-  .messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding-bottom: 20px; }
-  .msg { padding: 12px 16px; border-radius: 12px; max-width: 85%; font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
+  main { flex: 1; max-width: 800px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; padding: 20px; overflow: hidden; }
+  .messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding-bottom: 20px; padding-right: 4px; }
+  .msg { padding: 14px 18px; border-radius: 14px; max-width: 85%; font-size: 14px; line-height: 1.6; white-space: pre-wrap; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
   .msg.user { align-self: flex-end; background: var(--surface-hover); color: var(--text); border-bottom-right-radius: 4px; }
-  .msg.ai { align-self: flex-start; background: var(--surface); color: var(--text); border-bottom-left-radius: 4px; }
+  .msg.ai { align-self: flex-start; background: var(--surface); color: var(--text); border-bottom-left-radius: 4px; border: 1px solid var(--border); }
   .msg img { max-width: 100%; border-radius: 8px; margin-top: 8px; display: block; }
+  .preview-thumb { max-height: 60px; border-radius: 6px; margin-bottom: 6px; display: inline-block; }
 
   /* Giriş Kutusu */
-  .input-container { background: var(--surface); border: 1px solid var(--border); border-radius: 28px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
-  .input-row { display: flex; align-items: center; gap: 10px; }
-  textarea { flex: 1; background: transparent; border: none; color: var(--text); font-size: 14px; outline: none; resize: none; max-height: 120px; font-family: inherit; }
-  .send-btn { background: var(--accent); color: var(--bg); border: none; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: bold; }
+  .input-container { background: var(--surface); border: 1px solid var(--border); border-radius: 24px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+  .input-row { display: flex; align-items: flex-end; gap: 10px; }
+  textarea { flex: 1; background: transparent; border: none; color: var(--text); font-size: 14px; outline: none; resize: none; max-height: 120px; font-family: inherit; padding-bottom: 6px; }
+  
+  .action-buttons { display: flex; align-items: center; gap: 8px; }
+  .attach-btn { background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px; padding: 6px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .attach-btn:hover { color: var(--text); background: var(--surface-hover); }
+
+  .send-btn { background: var(--accent); color: var(--bg); border: none; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: bold; flex-shrink: 0; }
   .send-btn:hover { background: var(--accent-hover); }
   .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -68,7 +74,7 @@
 
   /* Giriş Ekranı */
   .auth-overlay { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 100; }
-  .authBox { width: 100%; max-width: 380px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px; }
+  .authBox { width: 100%; max-width: 380px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
   .authBox h2 { margin-top: 0; font-size: 20px; margin-bottom: 20px; color: var(--text); }
   .authBox label { font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 6px; }
   .authBox input { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 16px; width: 100%; padding: 10px 12px; color: var(--text); outline: none; }
@@ -113,7 +119,7 @@
   <div class="user-bar">
     <div id="userEmail" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></div>
     <div style="display: flex; justify-content: space-between; align-items: center;">
-      <span id="limitBadge" style="font-size: 11px;">Limit: --/--</span>
+      <span id="limitBadge" style="font-size: 11px;">Limit: Yükleniyor...</span>
       <button id="logoutBtn">Çıkış</button>
     </div>
   </div>
@@ -135,9 +141,14 @@
     </div>
 
     <div class="input-container">
+      <div id="filePreviewContainer" style="display:none; padding: 4px 8px;"></div>
       <div class="input-row">
+        <input type="file" id="fileInput" style="display: none;" accept="image/*" />
+        <button class="attach-btn" id="attachBtn" title="Görsel veya Dosya Ekle">📎</button>
         <textarea id="input" rows="1" placeholder="Livanni AI'a bir şeyler sorun..." autocomplete="off"></textarea>
-        <button id="sendBtn" class="send-btn">↑</button>
+        <div class="action-buttons">
+          <button id="sendBtn" class="send-btn">↑</button>
+        </div>
       </div>
       <div class="hint-row">
         <span id="hint">Enter ile gönder, Shift+Enter ile alt satıra geç.</span>
@@ -156,6 +167,7 @@ let mode = "chat";
 let sessions = [];
 let currentSessionIndex = 0;
 let currentSession = null;
+let attachedFileBase64 = null;
 
 const authScreen = document.getElementById("authScreen");
 const authTitle = document.getElementById("authTitle");
@@ -220,11 +232,24 @@ async function refreshLimit() {
 
   const { data, error } = await supabaseClient
     .from("user_limits")
-    .select("usage_today, daily_limit")
+    .select("chat_usage_today, daily_chat_limit")
     .eq("id", activeUser.id)
     .single();
+    
   if (!error && data) {
-    document.getElementById("limitBadge").textContent = `Limit: ${data.usage_today}/${data.daily_limit}`;
+    document.getElementById("limitBadge").textContent = `Limit: ${data.chat_usage_today}/${data.daily_chat_limit}`;
+  } else {
+    // Alternatif sütun adları ihtimaline karşı ikincil kontrol
+    const { data: altData } = await supabaseClient
+      .from("user_limits")
+      .select("*")
+      .eq("id", activeUser.id)
+      .single();
+    if (altData) {
+      const usage = altData.chat_usage_today ?? altData.usage_today ?? 0;
+      const limit = altData.daily_chat_limit ?? altData.daily_limit ?? 50;
+      document.getElementById("limitBadge").textContent = `Limit: ${usage}/${limit}`;
+    }
   }
 }
 
@@ -252,6 +277,30 @@ const modelSelect = document.getElementById("modelSelect");
 const chatHistoryList = document.getElementById("chatHistoryList");
 const tabChat = document.getElementById("tab-chat");
 const tabImage = document.getElementById("tab-image");
+const fileInput = document.getElementById("fileInput");
+const attachBtn = document.getElementById("attachBtn");
+const filePreviewContainer = document.getElementById("filePreviewContainer");
+
+attachBtn.addEventListener("click", () => fileInput.click());
+
+fileInput.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(uploadEvent) {
+    attachedFileBase64 = uploadEvent.target.result.split(',')[1];
+    filePreviewContainer.style.display = "block";
+    filePreviewContainer.innerHTML = `<img src="${uploadEvent.target.result}" class="preview-thumb" /> <span style="font-size:11px; color:var(--text-muted); cursor:pointer;" onclick="clearAttachment()">[Kaldır]</span>`;
+  };
+  reader.readAsDataURL(file);
+});
+
+window.clearAttachment = function() {
+  attachedFileBase64 = null;
+  fileInput.value = "";
+  filePreviewContainer.style.display = "none";
+  filePreviewContainer.innerHTML = "";
+};
 
 async function loadUserChats() {
   const sessionData = await supabaseClient.auth.getSession();
@@ -269,31 +318,47 @@ async function loadUserChats() {
       sessions = data.map(item => ({
         id: item.id,
         title: item.title,
-        history: item.history
+        history: item.history || [],
+        model: item.model || "gemini"
       }));
     } else {
       const local = JSON.parse(localStorage.getItem("livanni_sessions_" + activeUser.id));
       if (local && local.length > 0) {
         sessions = local;
         for (let s of sessions) {
-          await supabaseClient.from("chats").insert({ user_id: activeUser.id, title: s.title, history: s.history });
+          await supabaseClient.from("chats").insert({ user_id: activeUser.id, title: s.title, history: s.history, model: s.model || "gemini" });
         }
       } else {
         sessions = [];
-        await createNewChatInDB("Yeni Sohbet", []);
+        await createNewChatInDB("Yeni Sohbet", [], "gemini");
         return;
       }
     }
   } catch (e) {
-    console.error("Sohbetler yüklenirken hata:", e);
-    sessions = [{ title: "Yeni Sohbet", history: [] }];
+    sessions = [{ title: "Yeni Sohbet", history: [], model: "gemini" }];
   }
 
   currentSessionIndex = 0;
+  updateModelSelectorUI();
   saveState();
   renderSidebar();
   renderMessages();
 }
+
+function updateModelSelectorUI() {
+  const active = sessions[currentSessionIndex];
+  if (active) {
+    modelSelect.value = active.model || "gemini";
+  }
+}
+
+modelSelect.addEventListener("change", async () => {
+  const active = sessions[currentSessionIndex];
+  if (active) {
+    active.model = modelSelect.value;
+    await saveState();
+  }
+});
 
 async function saveState() {
   const sessionData = await supabaseClient.auth.getSession();
@@ -308,28 +373,29 @@ async function saveState() {
   if (active.id) {
     await supabaseClient
       .from("chats")
-      .update({ title: active.title, history: active.history, updated_at: new Date() })
+      .update({ title: active.title, history: active.history, model: active.model, updated_at: new Date() })
       .eq("id", active.id);
   }
 }
 
-async function createNewChatInDB(title, history) {
+async function createNewChatInDB(title, history, model = "gemini") {
   const sessionData = await supabaseClient.auth.getSession();
   const activeUser = sessionData.data.session?.user || currentSession?.user;
   if (!activeUser) return;
 
   const { data, error } = await supabaseClient
     .from("chats")
-    .insert({ user_id: activeUser.id, title, history })
+    .insert({ user_id: activeUser.id, title, history, model })
     .select()
     .single();
 
   if (!error && data) {
-    sessions.unshift({ id: data.id, title: data.title, history: data.history });
+    sessions.unshift({ id: data.id, title: data.title, history: data.history, model: data.model });
   } else {
-    sessions.unshift({ title, history });
+    sessions.unshift({ title, history, model });
   }
   currentSessionIndex = 0;
+  updateModelSelectorUI();
   saveState();
   renderSidebar();
   renderMessages();
@@ -347,6 +413,8 @@ function renderMessages() {
     div.className = "msg " + (msg.role === "user" ? "user" : "ai");
     if (msg.type === "image") {
       div.innerHTML = `<div>Üretilen Görsel:</div><img src="data:image/png;base64,${msg.content}" />`;
+    } else if (msg.imageAttachment) {
+      div.innerHTML = `<img src="data:image/png;base64,${msg.imageAttachment}" class="preview-thumb" /><div>${escapeHTML(msg.content)}</div>`;
     } else {
       div.innerHTML = escapeHTML(msg.content);
     }
@@ -386,6 +454,7 @@ function renderSidebar() {
 
 function loadSession(index) {
   currentSessionIndex = index;
+  updateModelSelectorUI();
   renderMessages();
   renderSidebar();
 }
@@ -398,19 +467,20 @@ async function deleteSession(index) {
 
   sessions.splice(index, 1);
   if (sessions.length === 0) {
-    await createNewChatInDB("Yeni Sohbet", []);
+    await createNewChatInDB("Yeni Sohbet", [], "gemini");
   } else {
     if (currentSessionIndex >= sessions.length) {
       currentSessionIndex = sessions.length - 1;
     }
     saveState();
   }
+  updateModelSelectorUI();
   renderMessages();
   renderSidebar();
 }
 
 document.getElementById("newChatBtn").addEventListener("click", async () => {
-  await createNewChatInDB("Yeni Sohbet", []);
+  await createNewChatInDB("Yeni Sohbet", [], "gemini");
   statusEl.textContent = "Hazır";
 });
 
@@ -446,9 +516,8 @@ sendBtn.addEventListener("click", handleSend);
 
 async function handleSend() {
   const text = input.value.trim();
-  if (!text) return;
+  if (!text && !attachedFileBase64) return;
 
-  // Her istekte oturumu tazeleyerek kontrol et
   const sessionCheck = await supabaseClient.auth.getSession();
   const activeSessionToken = sessionCheck.data.session;
   
@@ -459,32 +528,42 @@ async function handleSend() {
   currentSession = activeSessionToken;
 
   if (sessions.length === 0) {
-    await createNewChatInDB(text.length > 20 ? text.substring(0, 20) + "..." : text, []);
+    await createNewChatInDB(text.length > 20 ? text.substring(0, 20) + "..." : (text || "Görsel Üretimi"), [], "gemini");
   }
 
   const activeSession = sessions[currentSessionIndex];
   if (!activeSession) return;
 
   if (activeSession.history.length === 0) {
-    activeSession.title = text.length > 20 ? text.substring(0, 20) + "..." : text;
+    activeSession.title = text.length > 20 ? text.substring(0, 20) + "..." : (text || "Görsel Üretimi");
   }
 
-  activeSession.history.push({ role: "user", content: text, type: "text" });
+  const currentAttachment = attachedFileBase64;
+  const activeMode = mode;
+
+  activeSession.history.push({ 
+    role: "user", 
+    content: text, 
+    type: "text", 
+    imageAttachment: currentAttachment 
+  });
+
   await saveState();
   renderMessages();
   renderSidebar();
   
   input.value = "";
   input.style.height = "auto";
+  window.clearAttachment();
   sendBtn.disabled = true;
   
-  const selectedModel = modelSelect.value;
-  statusEl.textContent = mode === "chat" ? `${selectedModel === "gemini" ? "Gemini" : "Llama"} düşünüyor...` : "Görsel üretiliyor...";
+  const selectedModel = activeSession.model || modelSelect.value;
+  statusEl.textContent = activeMode === "chat" ? `${selectedModel === "gemini" ? "Gemini" : "Llama"} düşünüyor...` : "Görsel üretiliyor...";
 
   try {
     const authHeader = { Authorization: `Bearer ${currentSession.access_token}` };
     
-    if (mode === "chat") {
+    if (activeMode === "chat") {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeader },
@@ -503,7 +582,7 @@ async function handleSend() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       
-      activeSession.history.push({ role: "assistant", content: data.imageBase64, type: "image" });
+      activeSession.history.push({ role: "assistant", content: data.imageBase64 || data.image, type: "image" });
       await refreshLimit();
     }
 
@@ -521,6 +600,7 @@ async function handleSend() {
 }
 
 function escapeHTML(str) {
+  if (!str) return "";
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
