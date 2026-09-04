@@ -31,60 +31,55 @@ export default async function handler(req, res) {
     return res.status(429).json({ error: 'Günlük görsel işleme limitinize ulaştınız.' });
   }
 
+  // 3. Fotoğraf Yüklenmediyse Engelle
+  if (!image) {
+    return res.status(400).json({ error: 'Lütfen düzenlemek istediğiniz fotoğrafı yükleyin.' });
+  }
+
+  // 4. Vercel Token Kontrolü
+  if (!process.env.HF_ACCESS_TOKEN) {
+    return res.status(400).json({ 
+      error: 'Vercel ortamında HF_ACCESS_TOKEN bulunamadı.' 
+    });
+  }
+
   try {
-    let base64Image = '';
+    const cleanBase64 = image.includes(',') ? image.split(',')[1] : image;
 
-    if (image) {
-      // 🟢 DURUM 1: Fotoğraf Yüklendi -> Image-to-Image (Arka plan değiştirme, oda oluşturma, düzenleme)
-      const cleanBase64 = image.includes(',') ? image.split(',')[1] : image;
-
-      // Hugging Face üzerindeki Image-to-Image modeline gönderiyoruz
-      const response = await fetch(
-        "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-refiner-1.0",
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.HF_ACCESS_TOKEN}`,
-            "Content-Type": "application/json",
-          },
-          method: "POST",
-          body: JSON.stringify({
-            inputs: cleanBase64,
-            parameters: {
-              prompt: prompt || "placed in a modern living room background, high quality",
-              strength: 0.65 // 0.65 seviyesi ana objeyi korur, arka planı prompt'a göre yeniden çizer
-            }
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Görsel düzenleme servisi hatası: ${errText}`);
+    // Yüklenen fotoğrafı baz alan Hugging Face Img2Img Servisi
+    const response = await fetch(
+      "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-refiner-1.0",
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.HF_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+        body: JSON.stringify({
+          inputs: cleanBase64,
+          parameters: {
+            prompt: prompt || "high quality background edit",
+            strength: 0.65 // Ana nesneyi/koltuğu korur, etrafı değiştirmesini sağlar
+          }
+        }),
       }
+    );
 
-      const arrayBuffer = await response.arrayBuffer();
-      base64Image = Buffer.from(arrayBuffer).toString('base64');
-
-    } else {
-      // 🔵 DURUM 2: Fotoğraf Yok -> Sıfırdan Resim Çiz (Text-to-Image)
-      const randomSeed = Math.floor(Math.random() * 10000000);
-      const encodedPrompt = encodeURIComponent(prompt || "A modern furniture design in a luxury room");
-      const finalImageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true&seed=${randomSeed}&model=flux`;
-
-      const imageRes = await fetch(finalImageUrl);
-      if (!imageRes.ok) throw new Error('Görsel üretme servisi yanıt vermedi.');
-
-      const arrayBuffer = await imageRes.arrayBuffer();
-      base64Image = Buffer.from(arrayBuffer).toString('base64');
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Görsel işleme hatası: ${errText}`);
     }
 
-    // 3. Kullanım Limitini 1 Arttır
+    const arrayBuffer = await response.arrayBuffer();
+    const base64Image = Buffer.from(arrayBuffer).toString('base64');
+
+    // 5. Limit Arttır
     await supabase.rpc('increment_image_usage', { user_id: userId });
 
     res.status(200).json({ imageBase64: base64Image });
 
   } catch (err) {
-    console.error("Görsel İşleme Hatası:", err);
+    console.error("Görsel İşleme Hatası:", err.message);
     res.status(500).json({ error: 'Görsel işlenirken bir hata oluştu: ' + err.message });
   }
 }
