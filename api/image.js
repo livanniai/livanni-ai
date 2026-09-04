@@ -1,4 +1,4 @@
-import { createCanvas, loadImage } from '@napi-rs/canvas';
+import Jimp from 'jimp';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -9,41 +9,38 @@ export default async function handler(req, res) {
     const { prompt, image, imageBase64 } = req.body;
     const inputImage = image || imageBase64;
 
-    // 1. DURUM: Resim Üzerine Yazı / Filigran Ekleme (Yerel Canvas İşlemi)
+    // 1. DURUM: Resim Üzerine "Livanni" Yazısı / Filigran Ekleme (Pure JS Canvas / Jimp)
     if (inputImage) {
       const cleanBase64 = inputImage.includes(',') ? inputImage.split(',')[1] : inputImage;
       const imageBuffer = Buffer.from(cleanBase64, 'base64');
 
-      const img = await loadImage(imageBuffer);
-      const canvas = createCanvas(img.width, img.height);
-      const ctx = canvas.getContext('2d');
+      // Görseli yükle
+      const jimpImage = await Jimp.read(imageBuffer);
 
-      ctx.drawImage(img, 0, 0);
-
-      // Yazı boyutu ve stil ayarları
-      const fontSize = Math.max(28, Math.floor(img.width * 0.05));
-      ctx.font = `bold ${fontSize}px sans-serif`;
-      ctx.fillStyle = '#FFFFFF';
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-      ctx.shadowBlur = 8;
-      ctx.shadowOffsetX = 2;
-      ctx.shadowOffsetY = 2;
+      // Metin için font yükle
+      const font = await Jimp.loadFont(Jimp.FONT_SANS_64_WHITE);
 
       const textToWrite = prompt && !prompt.toLowerCase().includes('üzerine') ? prompt : 'Livanni';
 
-      // Sağ alt köşeye konumlandırma
-      const textMetrics = ctx.measureText(textToWrite);
-      const padding = fontSize * 0.8;
-      const x = img.width - textMetrics.width - padding;
-      const y = img.height - padding;
+      // Metin genişliğini hesapla ve sağ alt köşeye hizala
+      const textWidth = Jimp.measureText(font, textToWrite);
+      const textHeight = Jimp.measureTextHeight(font, textToWrite, jimpImage.getWidth());
 
-      ctx.fillText(textToWrite, x, y);
+      const padding = 20;
+      const x = jimpImage.getWidth() - textWidth - padding;
+      const y = jimpImage.getHeight() - textHeight - padding;
 
-      const resultBase64 = canvas.toBuffer('image/png').toString('base64');
+      // Metni yaz
+      jimpImage.print(font, Math.max(10, x), Math.max(10, y), textToWrite);
+
+      // Buffer'a çevir ve Base64 dön
+      const processedBuffer = await jimpImage.getBufferAsync(Jimp.MIME_PNG);
+      const resultBase64 = processedBuffer.toString('base64');
+
       return res.status(200).json({ imageBase64: resultBase64 });
     }
 
-    // 2. DURUM: Sıfırdan Görsel Üretme (Text-to-Image via Pollinations AI)
+    // 2. DURUM: Sıfırdan Görsel Üretme (Pollinations AI)
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt gereklidir.' });
     }
@@ -59,7 +56,7 @@ export default async function handler(req, res) {
     clearTimeout(timeoutId);
 
     if (!imageResponse.ok) {
-      throw new Error(`Görsel oluşturma servisi yanıt vermedi (${imageResponse.status})`);
+      throw new Error(`Görsel servisi yanıt vermedi (${imageResponse.status})`);
     }
 
     const arrayBuffer = await imageResponse.arrayBuffer();
