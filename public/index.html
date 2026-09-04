@@ -282,16 +282,48 @@ const filePreviewContainer = document.getElementById("filePreviewContainer");
 
 attachBtn.addEventListener("click", () => fileInput.click());
 
-fileInput.addEventListener("change", (e) => {
+// Yüklenen resmi otomatik sıkıştırıp küçülten yardımcı fonksiyon
+const compressImage = (file) => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 1280;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > MAX_WIDTH) {
+          height = Math.round((height * MAX_WIDTH) / width);
+          width = MAX_WIDTH;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        resolve(dataUrl);
+      };
+    };
+  });
+};
+
+fileInput.addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(uploadEvent) {
-    attachedFileBase64 = uploadEvent.target.result.split(',')[1];
-    filePreviewContainer.style.display = "block";
-    filePreviewContainer.innerHTML = `<img src="${uploadEvent.target.result}" class="preview-thumb" /> <span style="font-size:11px; color:var(--text-muted); cursor:pointer;" onclick="clearAttachment()">[Kaldır]</span>`;
-  };
-  reader.readAsDataURL(file);
+  
+  // Resmi önce tarayıcıda otomatik sıkıştırıyoruz
+  const compressedDataUrl = await compressImage(file);
+  attachedFileBase64 = compressedDataUrl.split(',')[1];
+  
+  filePreviewContainer.style.display = "block";
+  filePreviewContainer.innerHTML = `<img src="${compressedDataUrl}" class="preview-thumb" /> <span style="font-size:11px; color:var(--text-muted); cursor:pointer;" onclick="clearAttachment()">[Kaldır]</span>`;
 });
 
 window.clearAttachment = function() {
@@ -400,6 +432,7 @@ async function createNewChatInDB(title, history, model = "gemini") {
   renderMessages();
 }
 
+// GÖRSEL GÖSTERİM HATASI BURADA DÜZELTİLDİ
 function renderMessages() {
   messagesEl.innerHTML = "";
   const currentHist = sessions[currentSessionIndex]?.history || [];
@@ -411,9 +444,12 @@ function renderMessages() {
     const div = document.createElement("div");
     div.className = "msg " + (msg.role === "user" ? "user" : "ai");
     if (msg.type === "image") {
-      div.innerHTML = `<div>Üretilen Görsel:</div><img src="data:image/png;base64,${msg.content}" />`;
+      // API yanıtındaki prefix kontrolü
+      const imgSrc = msg.content.startsWith("data:") ? msg.content : `data:image/jpeg;base64,${msg.content}`;
+      div.innerHTML = `<div>Üretilen Görsel:</div><img src="${imgSrc}" alt="Görsel" />`;
     } else if (msg.imageAttachment) {
-      div.innerHTML = `<img src="data:image/png;base64,${msg.imageAttachment}" class="preview-thumb" /><div>${escapeHTML(msg.content)}</div>`;
+      const attachSrc = msg.imageAttachment.startsWith("data:") ? msg.imageAttachment : `data:image/jpeg;base64,${msg.imageAttachment}`;
+      div.innerHTML = `<img src="${attachSrc}" class="preview-thumb" /><div>${escapeHTML(msg.content)}</div>`;
     } else {
       div.innerHTML = escapeHTML(msg.content);
     }
@@ -575,11 +611,10 @@ async function handleSend() {
       body: JSON.stringify(payload)
     });
 
-    // Yanıtın JSON olup olmadığını kontrol et
     const contentType = res.headers.get("content-type");
     if (!contentType || !contentType.includes("application/json")) {
       const textResponse = await res.text();
-      throw new Error(`Sunucudan JSON yerine HTML döndü (${res.status}). Netlify redirects ayarlarını kontrol edin.`);
+      throw new Error(`Sunucudan JSON yerine HTML döndü (${res.status}).`);
     }
 
     const data = await res.json();
