@@ -5,16 +5,33 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Sadece POST istekleri kabul edilir');
 
-  const { userId, message, model } = req.body;
+  // 1. Frontend'den gelen Authorization header'ını al ve kullanıcıyı doğrula
+  const authHeader = req.headers['authorization'];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Oturum açılmamış veya token eksik.' });
+  }
 
-  // 1. Supabase Limit Kontrolü
+  const token = authHeader.split(' ')[1];
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+  if (authError || !user) {
+    return res.status(401).json({ error: 'Kullanıcı bulunamadı veya oturum geçersiz.' });
+  }
+
+  const userId = user.id;
+  const { messages, model } = req.body;
+  const message = messages?.[messages.length - 1]?.content || "";
+
+  // 2. Supabase Limit Kontrolü
   const { data: userLimit, error } = await supabase
     .from('user_limits')
     .select('chat_usage_today, daily_chat_limit')
     .eq('id', userId)
     .single();
 
-  if (error || !userLimit) return res.status(401).json({ error: 'Kullanıcı bulunamadı veya oturum açılmamış.' });
+  if (error || !userLimit) {
+    return res.status(401).json({ error: 'Kullanıcı limit bilgisi bulunamadı.' });
+  }
   if (userLimit.chat_usage_today >= userLimit.daily_chat_limit) {
     return res.status(429).json({ error: 'Günlük sohbet limitinize ulaştınız.' });
   }
@@ -22,7 +39,7 @@ export default async function handler(req, res) {
   try {
     let aiResponseText = "";
 
-    // 2. Seçilen Modele Göre API İsteği
+    // 3. Seçilen Modele Göre API İsteği
     if (model === 'llama') {
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -32,7 +49,7 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           model: "llama3-70b-8192",
-          messages: [{ role: "user", content: message }]
+          messages: messages.map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content }))
         })
       });
       const data = await response.json();
@@ -43,14 +60,17 @@ export default async function handler(req, res) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: message }] }]
+          contents: messages.map(m => ({
+            role: m.role === 'user' ? 'user' : 'model',
+            parts: [{ text: m.content }]
+          }))
         })
       });
       const data = await response.json();
       aiResponseText = data.candidates[0].content.parts[0].text;
     }
 
-    // 3. Kullanımı 1 Arttır
+    // 4. Kullanımı 1 Arttır
     await supabase.rpc('increment_chat_usage', { user_id: userId }); 
 
     res.status(200).json({ reply: aiResponseText });
