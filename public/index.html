@@ -295,7 +295,7 @@ fileInput.addEventListener("change", (e) => {
 });
 
 window.clearAttachment = function() {
-  attachedFileBase64 = "";
+  attachedFileBase64 = null;
   fileInput.value = "";
   filePreviewContainer.style.display = "none";
   filePreviewContainer.innerHTML = "";
@@ -539,12 +539,12 @@ async function handleSend() {
     activeSession.title = text.length > 20 ? text.substring(0, 20) + "..." : (text || "Görsel Üretimi");
   }
 
+  // 1. Resmi temizlemeden ÖNCE değişkene yedekliyoruz
   const currentAttachment = attachedFileBase64;
   const activeMode = mode;
-
-  // Mesaj gönderilirken o anki sohbetin kayıtlı modeli ne ise kesin olarak o alınır
   const selectedModel = activeSession.model || "gemini";
 
+  // 2. Geçmişe ekle
   activeSession.history.push({ 
     role: "user", 
     content: text, 
@@ -556,6 +556,7 @@ async function handleSend() {
   renderMessages();
   renderSidebar();
   
+  // 3. Giriş alanlarını temizle
   input.value = "";
   input.style.height = "auto";
   window.clearAttachment();
@@ -577,10 +578,15 @@ async function handleSend() {
       
       activeSession.history.push({ role: "assistant", content: data.reply, type: "text" });
     } else {
+      // 🟢 HEM image HEM DE imageBase64 EKLENDİ
       const res = await fetch("/api/image", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeader },
-        body: JSON.stringify({ prompt: text })
+        body: JSON.stringify({ 
+          prompt: text, 
+          image: currentAttachment,
+          imageBase64: currentAttachment
+        })
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
