@@ -3,78 +3,42 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Sadece POST istekleri kabul edilir.' });
   }
 
-  const token = process.env.HF_ACCESS_TOKEN || process.env.HF_TOKEN;
-
-  if (!token) {
-    return res.status(401).json({ 
-      error: 'Vercel ortam değişkenlerinde HF_ACCESS_TOKEN bulunamadı.' 
-    });
-  }
-
   try {
     const { prompt, image, imageBase64 } = req.body;
-    const inputImage = image || imageBase64;
 
-    if (!prompt && !inputImage) {
-      return res.status(400).json({ error: 'Prompt veya görsel gereklidir.' });
+    if (!prompt) {
+      return res.status(400).json({ error: 'Prompt gereklidir.' });
     }
 
-    // 1. DURUM: Resim Düzenleme / Üzerine Yazı Ekleme (Img2Img)
-    if (inputImage) {
-      const cleanBase64 = inputImage.includes(',') ? inputImage.split(',')[1] : inputImage;
+    // İstek parametrelerini düzenleme
+    const encodedPrompt = encodeURIComponent(prompt);
+    const seed = Math.floor(Math.random() * 1000000);
 
-      // Resim düzenleme için en hızlı çalışan HF modeli
-      const response = await fetch(
-        "https://api-inference.huggingface.co/models/timbrooks/instruct-pix2pix",
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            inputs: prompt || "write livanni on image",
-            parameters: {
-              image: cleanBase64
-            }
-          }),
-        }
-      );
+    // Resim ve metin harmanlaması için Pollinations Image Endpoint'i
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${seed}&width=1024&height=1024&nologo=true&model=flux`;
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Hugging Face API Hatası (${response.status}): ${errorText}`);
-      }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 sn timeout
 
-      const arrayBuffer = await response.arrayBuffer();
-      const resultBase64 = Buffer.from(arrayBuffer).toString('base64');
-      return res.status(200).json({ imageBase64: resultBase64 });
+    const imageResponse = await fetch(imageUrl, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!imageResponse.ok) {
+      throw new Error("Görsel oluşturma servisine erişilemedi.");
     }
 
-    // 2. DURUM: Sıfırdan Resim Üretme (Text-to-Image)
-    const response = await fetch(
-      "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ inputs: prompt }),
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Hugging Face API Hatası (${response.status}): ${errorText}`);
-    }
-
-    const arrayBuffer = await response.arrayBuffer();
+    const arrayBuffer = await imageResponse.arrayBuffer();
     const resultBase64 = Buffer.from(arrayBuffer).toString('base64');
+
     return res.status(200).json({ imageBase64: resultBase64 });
 
   } catch (error) {
     console.error("Image API Error:", error);
+
+    if (error.name === 'AbortError') {
+      return res.status(504).json({ error: "Sunucu yanıt vermekte gecikti, lütfen tekrar deneyin." });
+    }
+
     return res.status(500).json({ 
       error: `Görsel işlenirken bir hata oluştu: ${error.message}` 
     });
