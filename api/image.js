@@ -3,11 +3,11 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Sadece POST istekleri kabul edilir.' });
   }
 
-  const token = process.env.HF_ACCESS_TOKEN || process.env.HF_TOKEN;
+  const token = process.env.REPLICATE_API_TOKEN;
 
   if (!token) {
     return res.status(401).json({ 
-      error: 'Vercel ortam değişkenlerinde HF_ACCESS_TOKEN bulunamadı.' 
+      error: 'Vercel ortam değişkenlerinde REPLICATE_API_TOKEN bulunamadı.' 
     });
   }
 
@@ -19,86 +19,93 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Prompt veya görsel gereklidir.' });
     }
 
-    // 1. DURUM: Resim Üzerine Yazı / Düzenleme (Image-to-Image)
+    // 1. DURUM: Resim Düzenleme / Arka Plan Değiştirme / Oda Dekoru (Img2Img)
     if (inputImage) {
       const cleanBase64 = inputImage.includes(',') ? inputImage.split(',')[1] : inputImage;
-      const imageBuffer = Buffer.from(cleanBase64, 'base64');
+      const formattedDataUri = `data:image/png;base64,${cleanBase64}`;
 
-      // Resim üzerine doğrudan modifikasyon yapan doğru Hugging Face modeli
-      const response = await fetch(
-        "https://api-inference.huggingface.co/models/pix2pix/instruct-pix2pix",
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "image/png",
-            "x-use-cache": "false"
-          },
-          body: imageBuffer,
-        }
-      );
+      // Flux Inpainting / Redesign Modeli
+      const response = await fetch("https://api.replicate.com/v1/predictions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          version: "c0b930819c922a6117326aa6a3eb77fb0b932822a153205776d54d1933f44503",
+          input: {
+            image: formattedDataUri,
+            prompt: prompt || "place the product in a modern luxury living room",
+            prompt_strength: 0.7
+          }
+        })
+      });
 
       if (!response.ok) {
-        // Alternatif olarak ControlNet Inpainting Endpoint'ine yönlendirme
-        const fallbackRes = await fetch(
-          "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0",
-          {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              inputs: prompt || "add text Livanni on image",
-              parameters: {
-                image: cleanBase64,
-                strength: 0.35 // Orijinal resmi %65 korur, sadece metni işler
-              }
-            }),
-          }
-        );
-
-        if (!fallbackRes.ok) {
-          const errText = await fallbackRes.text();
-          throw new Error(`Resim işleme başarısız oldu: ${errText}`);
-        }
-
-        const fbBuffer = await fallbackRes.arrayBuffer();
-        const fbBase64 = Buffer.from(fbBuffer).toString('base64');
-        return res.status(200).json({ imageBase64: fbBase64 });
+        const errorText = await response.text();
+        throw new Error(`Replicate API Hatası (${response.status}): ${errorText}`);
       }
 
-      const arrayBuffer = await response.arrayBuffer();
+      let prediction = await response.json();
+
+      // İşlem bitene kadar bekle (Polling)
+      while (prediction.status !== "succeeded" && prediction.status !== "failed") {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const checkRes = await fetch(prediction.urls.get, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        prediction = await checkRes.json();
+      }
+
+      if (prediction.status === "failed") {
+        throw new Error("Görsel işleme modeli işlemi tamamlayamadı.");
+      }
+
+      const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+      const imgRes = await fetch(outputUrl);
+      const arrayBuffer = await imgRes.arrayBuffer();
       const resultBase64 = Buffer.from(arrayBuffer).toString('base64');
+
       return res.status(200).json({ imageBase64: resultBase64 });
     }
 
     // 2. DURUM: Sıfırdan Görsel Üretme (Text-to-Image)
-    const response = await fetch(
-      "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ inputs: prompt }),
-      }
-    );
+    const response = await fetch("https://api.replicate.com/v1/predictions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        version: "black-forest-labs/flux-schnell",
+        input: { prompt: prompt }
+      })
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Hugging Face API Hatası: ${errorText}`);
+      throw new Error(`API Hatası: ${errorText}`);
     }
 
-    const arrayBuffer = await response.arrayBuffer();
+    let prediction = await response.json();
+
+    while (prediction.status !== "succeeded" && prediction.status !== "failed") {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const checkRes = await fetch(prediction.urls.get, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      prediction = await checkRes.json();
+    }
+
+    const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+    const imgRes = await fetch(outputUrl);
+    const arrayBuffer = await imgRes.arrayBuffer();
     const resultBase64 = Buffer.from(arrayBuffer).toString('base64');
+
     return res.status(200).json({ imageBase64: resultBase64 });
 
   } catch (error) {
     console.error("Image API Error:", error);
-    return res.status(500).json({ 
-      error: `Görsel işlenirken bir hata oluştu: ${error.message}` 
-    });
+    return res.status(500).json({ error: `Hata oluştu: ${error.message}` });
   }
 }
