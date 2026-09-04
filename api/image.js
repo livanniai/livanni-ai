@@ -32,27 +32,27 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 2. Google Imagen 3 Görsel Üretim API İsteği (Doğru model adı ile)
-    const imagenResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${process.env.GEMINI_API_KEY}`, {
+    // 2. Güncel Gemini 2.5 Flash Image API İsteği
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        instances: [
-          { prompt: prompt || "A high quality professional image" }
-        ],
-        parameters: {
-          sampleCount: 1,
-          aspectRatio: "1:1",
-          outputMimeType: "image/jpeg"
-        }
+        contents: [{
+          parts: [
+            { text: prompt || "A high quality professional image" },
+            ...(imageBase64 ? [{ inline_data: { mime_type: "image/jpeg", data: imageBase64 } }] : [])
+          ]
+        }]
       })
     });
-
-    const data = await imagenResponse.json();
+    
+    const data = await response.json();
     if (data.error) throw new Error(data.error.message);
 
-    // Üretilen görselin base64 verisini alıyoruz
-    const generatedImageBase64 = data.predictions?.[0]?.bytesBase64Encoded;
+    // Modelin döndürdüğü görsel verisini yakalayalım
+    const part = data.candidates?.[0]?.content?.parts?.[0];
+    const generatedImageBase64 = part?.inline_data?.data || part?.text;
+
     if (!generatedImageBase64) {
       throw new Error("Görsel verisi alınamadı.");
     }
