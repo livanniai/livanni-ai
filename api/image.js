@@ -1,30 +1,55 @@
-// backend (/api/image.js) örneği
-export async function handler(event, context) {
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: "10mb",
+    },
+  },
+};
+
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Sadece POST istekleri kabul edilir." });
+  }
+
   try {
-    const { prompt, imageBase64 } = JSON.parse(event.body);
+    const { prompt, image, imageBase64 } = req.body;
+    const inputImage = image || imageBase64;
 
-    // Pollinations URL tabanlı dinamik istek gönderimi
-    // Prompt ve model parametreleri URL üzerinden iletilir
-    const encodedPrompt = encodeURIComponent(prompt || "improve furniture background, studio light, 4k");
-    
-    // Eğer mevcut bir görsel yüklendiyse prompt'a stil ve img-to-img komutları eklenir
-    let apiUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=1024&height=1024&nologo=true&seed=${Math.floor(Math.random() * 100000)}`;
+    if (!inputImage) {
+      return res.status(400).json({ error: "Lütfen düzenlenmesini istediğiniz görseli yükleyin." });
+    }
 
-    const response = await fetch(apiUrl);
-    const arrayBuffer = await response.arrayBuffer();
-    const base64Image = Buffer.from(arrayBuffer).toString('base64');
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    return {
-      statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        imageBase64: `data:image/jpeg;base64,${base64Image}`
-      })
+    // Base64 verisini temizleme
+    const cleanBase64 = inputImage.replace(/^data:image\/(png|jpeg|webp);base64,/, "");
+
+    const imagePart = {
+      inlineData: {
+        data: cleanBase64,
+        mimeType: "image/jpeg"
+      },
     };
+
+    const userPrompt = prompt || "Bu mobilyayı koruyarak arka planını modern, lüks bir salon stüdyo ortamına çevir.";
+
+    const result = await model.generateContent([
+      userPrompt,
+      imagePart
+    ]);
+
+    const response = await result.response;
+    const textResponse = response.text();
+
+    return res.status(200).json({
+      reply: textResponse
+    });
+
   } catch (error) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: error.message })
-    };
+    console.error("Görsel İşleme Hatası:", error);
+    return res.status(500).json({ error: "İşlem sırasında bir hata oluştu: " + error.message });
   }
 }
