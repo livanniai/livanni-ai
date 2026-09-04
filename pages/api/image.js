@@ -1,76 +1,50 @@
-import Jimp from 'jimp';
-
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '10mb',
-    },
-  },
-};
-
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Sadece POST istekleri desteklenmektedir.' });
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Sadece POST istekleri kabul edilir." });
   }
 
   try {
-    const { prompt, image, imageBase64 } = req.body || {};
+    const { prompt, image, imageBase64 } = req.body;
     const inputImage = image || imageBase64;
 
-    // 1. Görsel Üzerine Yazı Ekleme (Jimp)
-    if (inputImage) {
-      const cleanBase64 = inputImage.includes(',') ? inputImage.split(',')[1] : inputImage;
-      const imageBuffer = Buffer.from(cleanBase64, 'base64');
-
-      const jimpImage = await Jimp.read(imageBuffer);
-
-      if (jimpImage.getWidth() > 2000 || jimpImage.getHeight() > 2000) {
-        jimpImage.resize(2000, Jimp.AUTO);
-      }
-
-      const textToWrite = prompt && prompt.trim().length > 0 ? prompt : 'Livanni';
-
-      // Fontu CDN üzerinden güvenli yüklüyoruz
-      const font = await Jimp.loadFont(Jimp.FONT_SANS_32_WHITE);
-
-      const textWidth = Jimp.measureText(font, textToWrite);
-      const textHeight = Jimp.measureTextHeight(font, textToWrite, jimpImage.getWidth());
-
-      const padding = 25;
-      const x = jimpImage.getWidth() - textWidth - padding;
-      const y = jimpImage.getHeight() - textHeight - padding;
-
-      const overlay = new Jimp(textWidth + 20, textHeight + 10, 0x00000088);
-      jimpImage.composite(overlay, Math.max(10, x - 10), Math.max(10, y - 5));
-      jimpImage.print(font, Math.max(10, x), Math.max(10, y), textToWrite);
-
-      const processedBuffer = await jimpImage.quality(85).getBufferAsync(Jimp.MIME_JPEG);
-      const resultBase64 = processedBuffer.toString('base64');
-
-      return res.status(200).json({ imageBase64: `data:image/jpeg;base64,${resultBase64}` });
+    if (!prompt && !inputImage) {
+      return res.status(400).json({ error: "Lütfen bir metin (prompt) veya görsel girin." });
     }
 
-    // 2. Yapay Zeka Görsel Üretimi (Pollinations)
-    if (!prompt) {
-      return res.status(400).json({ error: 'Lütfen bir görsel tarifi (prompt) girin.' });
+    // Mobilya ve Kalite Odaklı Otomatik İngilizce İyileştirici Ekip
+    let finalPrompt = prompt || "modern furniture in a beautiful interior design background, 8k resolution, professional photography";
+
+    // Türkçe karakter ve genel detay iyileştirmesi
+    finalPrompt = `${finalPrompt}, highly detailed, photorealistic, studio lighting, 4k resolution`;
+
+    // Rastgele tohum (seed) üreterek her defasında farklı ve özgün resim basmasını sağlıyoruz
+    const seed = Math.floor(Math.random() * 999999);
+    
+    // Pollinations FLUX Engine Endpoint
+    const encodedPrompt = encodeURIComponent(finalPrompt);
+    let imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&model=flux&nologo=true&seed=${seed}`;
+
+    // Pollinations servisine istek atıyoruz
+    const response = await fetch(imageUrl);
+
+    if (!response.ok) {
+      throw new Error(`Görsel üretici sunucusu hata döndürdü: ${response.statusText}`);
     }
 
-    const seed = Math.floor(Math.random() * 1000000);
-    const encodedPrompt = encodeURIComponent(prompt);
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${seed}&width=1024&height=1024&nologo=true&model=flux`;
+    // Gelen resmi arrayBuffer olarak alıp Base64 formatına dönüştürüyoruz
+    const arrayBuffer = await response.arrayBuffer();
+    const base64Image = Buffer.from(arrayBuffer).toString("base64");
+    const resultBase64 = `data:image/jpeg;base64,${base64Image}`;
 
-    const imageResponse = await fetch(imageUrl);
-    if (!imageResponse.ok) {
-      throw new Error(`Görsel üretme servisi yanıt vermedi (${imageResponse.status})`);
-    }
-
-    const arrayBuffer = await imageResponse.arrayBuffer();
-    const resultBase64 = Buffer.from(arrayBuffer).toString('base64');
-
-    return res.status(200).json({ imageBase64: `data:image/jpeg;base64,${resultBase64}` });
+    return res.status(200).json({ 
+      imageBase64: resultBase64,
+      image: resultBase64 
+    });
 
   } catch (error) {
-    console.error("Görsel işleme hatası:", error);
-    return res.status(500).json({ error: `Görsel işlenirken hata oluştu: ${error.message}` });
+    console.error("Görsel Üretim Hatası:", error);
+    return res.status(500).json({ 
+      error: "Görsel üretilirken bir hata oluştu: " + error.message 
+    });
   }
 }
