@@ -3,10 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "@netlify/plugin-nextjs": "^5.0.0",
     "@supabase/supabase-js": "^2.45.0",
     "jimp": "^0.22.12"
   },
   "scripts": {
-    "dev": "vercel dev"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
   }
 }
