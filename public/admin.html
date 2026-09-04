@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Livanni Admin Paneli</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body { font-family: -apple-system, sans-serif; background: #f7f5f2; margin: 0; padding: 24px; color: #1e1b16; }
+  h1 { font-size: 20px; }
+  .authBox { max-width: 380px; margin: 60px auto; background: white; border: 1px solid #e5e0d8; border-radius: 14px; padding: 28px; }
+  .authBox input { width: 100%; padding: 10px; margin: 8px 0; border-radius: 8px; border: 1px solid #e5e0d8; box-sizing: border-box; }
+  .authBox button { width: 100%; padding: 10px; border-radius: 8px; border: none; background: #8a6d3b; color: white; cursor: pointer; margin-top: 8px; }
+  table { width: 100%; border-collapse: collapse; background: white; border-radius: 10px; overflow: hidden; }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #e5e0d8; font-size: 14px; }
+  th { background: #f1ede6; }
+  input.limitInput { width: 60px; padding: 6px; border-radius: 6px; border: 1px solid #e5e0d8; }
+  button.saveBtn { padding: 6px 12px; border-radius: 6px; border: none; background: #8a6d3b; color: white; cursor: pointer; font-size: 13px; }
+  .hidden { display: none; }
+  .msg { font-size: 13px; color: #7a7267; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<div id="authScreen" class="authBox">
+  <h1>Admin Girişi</h1>
+  <input type="email" id="email" placeholder="Admin e-posta" />
+  <input type="password" id="password" placeholder="Şifre" />
+  <button id="loginBtn">Giriş Yap</button>
+  <div class="msg" id="authMsg"></div>
+</div>
+
+<div id="adminScreen" class="hidden">
+  <h1>Kullanıcılar ve Günlük Limitler</h1>
+  <table>
+    <thead>
+      <tr><th>E-posta</th><th>Bugünkü kullanım</th><th>Günlük limit</th><th></th></tr>
+    </thead>
+    <tbody id="userRows"></tbody>
+  </table>
+</div>
+
+<script>
+const SUPABASE_URL = "SUPABASE_PROJE_URLINI_BURAYA_YAPISTIR";
+const SUPABASE_ANON_KEY = "SUPABASE_ANON_KEYINI_BURAYA_YAPISTIR";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+document.getElementById("loginBtn").addEventListener("click", async () => {
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    document.getElementById("authMsg").textContent = error.message;
+    return;
+  }
+  await loadAdmin(data.session);
+});
+
+async function loadAdmin(session) {
+  // Backend'e "beni admin panelinde göster" isteği atıyoruz,
+  // yetki kontrolü (is_admin) backend'de yapılıyor.
+  const res = await fetch("/api/admin-users", {
+    headers: { Authorization: `Bearer ${session.access_token}` }
+  });
+  const data = await res.json();
+
+  if (data.error) {
+    document.getElementById("authMsg").textContent = data.error;
+    return;
+  }
+
+  document.getElementById("authScreen").classList.add("hidden");
+  document.getElementById("adminScreen").classList.remove("hidden");
+
+  const tbody = document.getElementById("userRows");
+  tbody.innerHTML = "";
+  data.users.forEach((u) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${u.email}</td>
+      <td>${u.usage_today}</td>
+      <td><input class="limitInput" type="number" value="${u.daily_limit}" data-id="${u.id}" /></td>
+      <td><button class="saveBtn" data-id="${u.id}">Kaydet</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.querySelectorAll(".saveBtn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.dataset.id;
+      const input = document.querySelector(`.limitInput[data-id="${id}"]`);
+      const newLimit = parseInt(input.value, 10);
+      const res = await fetch("/api/admin-users", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ userId: id, newLimit })
+      });
+      const result = await res.json();
+      btn.textContent = result.error ? "Hata!" : "Kaydedildi ✓";
+      setTimeout(() => (btn.textContent = "Kaydet"), 1500);
+    });
+  });
+}
+
+supabase.auth.getSession().then(({ data }) => {
+  if (data.session) loadAdmin(data.session);
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Livanni AI Stüdyo</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg: #f7f5f2; --panel: #ffffff; --ink: #1e1b16; --muted: #7a7267;
+    --accent: #8a6d3b; --accent-dark: #6b5329; --border: #e5e0d8;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); }
+  header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  header h1 { font-size: 18px; margin: 0; }
+  .tabs { display: flex; gap: 8px; }
+  .tab { padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); cursor: pointer; font-size: 14px; color: var(--muted); }
+  .tab.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .userbar { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+  .userbar button { padding: 6px 12px; font-size: 13px; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px; min-height: 420px; display: flex; flex-direction: column; }
+  .messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; max-height: 460px; }
+  .msg { padding: 10px 14px; border-radius: 10px; max-width: 85%; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
+  .msg.user { align-self: flex-end; background: var(--accent); color: white; }
+  .msg.ai { align-self: flex-start; background: #f1ede6; color: var(--ink); }
+  .msg img { max-width: 100%; border-radius: 8px; margin-top: 6px; display: block; }
+  form { display: flex; gap: 8px; }
+  input[type="text"], input[type="email"], input[type="password"] { flex: 1; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); font-size: 14px; width: 100%; }
+  button { padding: 12px 18px; border-radius: 10px; border: none; background: var(--accent); color: white; font-size: 14px; cursor: pointer; }
+  button:hover { background: var(--accent-dark); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .status { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+  .authBox { max-width: 380px; margin: 60px auto; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 28px; }
+  .authBox h2 { margin-top: 0; font-size: 18px; }
+  .authBox label { font-size: 13px; color: var(--muted); display: block; margin: 12px 0 6px; }
+  .authBox .switchLink { font-size: 13px; color: var(--accent); cursor: pointer; margin-top: 14px; text-align: center; }
+  .authError { color: #b3432c; font-size: 13px; margin-top: 10px; }
+  .hidden { display: none !important; }
+  .limitBadge { background: #f1ede6; padding: 4px 10px; border-radius: 20px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div id="authScreen" class="authBox">
+  <h2 id="authTitle">Giriş Yap</h2>
+  <label>E-posta</label>
+  <input type="email" id="authEmail" placeholder="ornek@mail.com" />
+  <label>Şifre</label>
+  <input type="password" id="authPassword" placeholder="••••••••" />
+  <div style="margin-top:16px; display:flex; gap:8px;">
+    <button id="authSubmit" style="flex:1;">Giriş Yap</button>
+  </div>
+  <div class="authError" id="authError"></div>
+  <div class="switchLink" id="authSwitch">Hesabın yok mu? Kayıt ol</div>
+</div>
+
+<div id="appScreen" class="hidden">
+  <header>
+    <h1>Livanni AI Stüdyo</h1>
+    <div class="tabs">
+      <button class="tab active" id="tab-chat">Sohbet</button>
+      <button class="tab" id="tab-image">Görsel Üret</button>
+    </div>
+    <div class="userbar">
+      <span id="userEmail"></span>
+      <span class="limitBadge" id="limitBadge">-- / --</span>
+      <button id="logoutBtn">Çıkış</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="panel">
+      <div class="status" id="status">Hazır.</div>
+      <div class="messages" id="messages"></div>
+      <form id="form">
+        <input type="text" id="input" placeholder="Bir mesaj yaz..." autocomplete="off" />
+        <button type="submit" id="sendBtn">Gönder</button>
+      </form>
+      <div class="hint" id="hint">Sohbet modundasın — mesajın Claude'a gidiyor.</div>
+    </div>
+  </main>
+</div>
+
+<script>
+const SUPABASE_URL = "SUPABASE_PROJE_URLINI_BURAYA_YAPISTIR";
+const SUPABASE_ANON_KEY = "SUPABASE_ANON_KEYINI_BURAYA_YAPISTIR";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let mode = "chat";
+let chatHistory = [];
+let currentSession = null;
+
+const authScreen = document.getElementById("authScreen");
+const appScreen = document.getElementById("appScreen");
+const authTitle = document.getElementById("authTitle");
+const authEmail = document.getElementById("authEmail");
+const authPassword = document.getElementById("authPassword");
+const authSubmit = document.getElementById("authSubmit");
+const authError = document.getElementById("authError");
+const authSwitch = document.getElementById("authSwitch");
+let isLoginMode = true;
+
+authSwitch.addEventListener("click", () => {
+  isLoginMode = !isLoginMode;
+  authTitle.textContent = isLoginMode ? "Giriş Yap" : "Kayıt Ol";
+  authSubmit.textContent = isLoginMode ? "Giriş Yap" : "Kayıt Ol";
+  authSwitch.textContent = isLoginMode ? "Hesabın yok mu? Kayıt ol" : "Zaten hesabın var mı? Giriş yap";
+  authError.textContent = "";
+});
+
+authSubmit.addEventListener("click", async () => {
+  authError.textContent = "";
+  const email = authEmail.value.trim();
+  const password = authPassword.value;
+  if (!email || !password) {
+    authError.textContent = "E-posta ve şifre gerekli.";
+    return;
+  }
+
+  authSubmit.disabled = true;
+  try {
+    if (isLoginMode) {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      await onLoggedIn(data.session);
+    } else {
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) throw error;
+      if (data.session) {
+        await onLoggedIn(data.session);
+      } else {
+        authError.textContent = "Kayıt başarılı! E-postanı kontrol edip doğrula, sonra giriş yap.";
+      }
+    }
+  } catch (err) {
+    authError.textContent = err.message;
+  } finally {
+    authSubmit.disabled = false;
+  }
+});
+
+async function onLoggedIn(session) {
+  currentSession = session;
+  authScreen.classList.add("hidden");
+  appScreen.classList.remove("hidden");
+  document.getElementById("userEmail").textContent = session.user.email;
+  await refreshLimit();
+}
+
+async function refreshLimit() {
+  const { data, error } = await supabase
+    .from("user_limits")
+    .select("usage_today, daily_limit")
+    .eq("id", currentSession.user.id)
+    .single();
+  if (!error && data) {
+    document.getElementById("limitBadge").textContent = `${data.usage_today} / ${data.daily_limit} görsel bugün`;
+  }
+}
+
+document.getElementById("logoutBtn").addEventListener("click", async () => {
+  await supabase.auth.signOut();
+  currentSession = null;
+  appScreen.classList.add("hidden");
+  authScreen.classList.remove("hidden");
+});
+
+supabase.auth.getSession().then(({ data }) => {
+  if (data.session) onLoggedIn(data.session);
+});
+
+const messagesEl = document.getElementById("messages");
+const form = document.getElementById("form");
+const input = document.getElementById("input");
+const sendBtn = document.getElementById("sendBtn");
+const statusEl = document.getElementById("status");
+const hintEl = document.getElementById("hint");
+const tabChat = document.getElementById("tab-chat");
+const tabImage = document.getElementById("tab-image");
+
+function addMessage(role, contentHTML) {
+  const div = document.createElement("div");
+  div.className = "msg " + (role === "user" ? "user" : "ai");
+  div.innerHTML = contentHTML;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+tabChat.addEventListener("click", () => {
+  mode = "chat";
+  tabChat.classList.add("active");
+  tabImage.classList.remove("active");
+  hintEl.textContent = "Sohbet modundasın — mesajın Claude'a gidiyor.";
+  input.placeholder = "Bir mesaj yaz...";
+});
+
+tabImage.addEventListener("click", () => {
+  mode = "image";
+  tabImage.classList.add("active");
+  tabChat.classList.remove("active");
+  hintEl.textContent = "Görsel üretim modundasın — günlük limitin var, aşağıda görebilirsin.";
+  input.placeholder = "Ne tür bir görsel istiyorsun?";
+});
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if (!text || !currentSession) return;
+
+  addMessage("user", escapeHTML(text));
+  input.value = "";
+  sendBtn.disabled = true;
+  statusEl.textContent = mode === "chat" ? "Claude düşünüyor..." : "Gemini görseli üretiyor...";
+
+  try {
+    const authHeader = { Authorization: `Bearer ${currentSession.access_token}` };
+
+    if (mode === "chat") {
+      chatHistory.push({ role: "user", content: text });
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeader },
+        body: JSON.stringify({ messages: chatHistory })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      chatHistory.push({ role: "assistant", content: data.reply });
+      addMessage("ai", escapeHTML(data.reply));
+    } else {
+      const res = await fetch("/api/image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeader },
+        body: JSON.stringify({ prompt: text })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      addMessage("ai", `<div>İşte üretilen görsel:</div><img src="data:image/png;base64,${data.imageBase64}" />`);
+      await refreshLimit();
+    }
+    statusEl.textContent = "Hazır.";
+  } catch (err) {
+    statusEl.textContent = "Hata: " + err.message;
+    addMessage("ai", "Üzgünüm: " + escapeHTML(err.message));
+  } finally {
+    sendBtn.disabled = false;
+  }
+});
+
+function escapeHTML(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+</script>
+
+</body>
+</html>
