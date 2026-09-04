@@ -32,14 +32,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 2. Güncel Gemini 2.5 Flash Image API İsteği
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    // 2. Panelin de desteklediği Gemini 3.6 Flash Model İsteği
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{
           parts: [
-            { text: prompt || "A high quality professional image" },
+            { text: prompt || "Bu görseli analiz et veya düzenle." },
             ...(imageBase64 ? [{ inline_data: { mime_type: "image/jpeg", data: imageBase64 } }] : [])
           ]
         }]
@@ -49,20 +49,14 @@ export default async function handler(req, res) {
     const data = await response.json();
     if (data.error) throw new Error(data.error.message);
 
-    // Modelin döndürdüğü görsel verisini yakalayalım
-    const part = data.candidates?.[0]?.content?.parts?.[0];
-    const generatedImageBase64 = part?.inline_data?.data || part?.text;
-
-    if (!generatedImageBase64) {
-      throw new Error("Görsel verisi alınamadı.");
-    }
+    const aiResponseText = data.candidates?.[0]?.content?.parts?.[0]?.text || "İşlem tamamlandı.";
 
     // 3. Görsel Kullanımını 1 Arttır
     await supabase.rpc('increment_image_usage', { user_id: userId });
 
-    res.status(200).json({ imageBase64: generatedImageBase64 });
+    res.status(200).json({ reply: aiResponseText, imageBase64: aiResponseText });
 
   } catch (err) {
-    res.status(500).json({ error: 'Görsel üretilirken hata oluştu: ' + err.message });
+    res.status(500).json({ error: 'Görsel işlenirken hata oluştu: ' + err.message });
   }
 }
