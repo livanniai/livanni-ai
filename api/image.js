@@ -15,20 +15,23 @@ export default async function handler(req, res) {
       const imageBuffer = Buffer.from(cleanBase64, 'base64');
 
       const jimpImage = await Jimp.read(imageBuffer);
-
-      // Vercel serverless dosya sistemi hatasını engellemek için fontu CDN üzerinden çekiyoruz
-      const fontUrl = 'https://unpkg.com/@jimp/plugin-print@0.22.10/fonts/open-sans/open-sans-64-white/open-sans-64-white.fnt';
-      const font = await Jimp.loadFont(fontUrl);
-
       const textToWrite = prompt && !prompt.toLowerCase().includes('üzerine') ? prompt : 'Livanni';
+
+      // Font dosyası indirmeden dahili standart fontu yükleme
+      const font = await Jimp.loadFont(Jimp.FONT_SANS_32_WHITE);
 
       const textWidth = Jimp.measureText(font, textToWrite);
       const textHeight = Jimp.measureTextHeight(font, textToWrite, jimpImage.getWidth());
 
-      const padding = 30;
+      const padding = 25;
       const x = jimpImage.getWidth() - textWidth - padding;
       const y = jimpImage.getHeight() - textHeight - padding;
 
+      // Okunabilirlik için arkasına koyu dikdörtgen şerit ekleme
+      const overlay = new Jimp(textWidth + 20, textHeight + 10, 0x00000088);
+      jimpImage.composite(overlay, Math.max(10, x - 10), Math.max(10, y - 5));
+
+      // Metni yazma
       jimpImage.print(font, Math.max(10, x), Math.max(10, y), textToWrite);
 
       const processedBuffer = await jimpImage.getBufferAsync(Jimp.MIME_PNG);
