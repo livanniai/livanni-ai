@@ -5,38 +5,43 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Sadece POST istekleri kabul edilir');
 
-  // 1. Frontend'den gelen Authorization header'ını al ve kullanıcıyı doğrula
-  const authHeader = req.headers['authorization'];
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Oturum açılmamış veya token eksik.' });
-  }
-
-  const token = authHeader.split(' ')[1];
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-  if (authError || !user) {
-    return res.status(401).json({ error: 'Kullanıcı bulunamadı veya oturum geçersiz.' });
-  }
-
-  const userId = user.id;
-  const { messages, model } = req.body;
-  const message = messages?.[messages.length - 1]?.content || "";
-
-  // 2. Supabase Limit Kontrolü
-  const { data: userLimit, error } = await supabase
-    .from('user_limits')
-    .select('chat_usage_today, daily_chat_limit')
-    .eq('id', userId)
-    .single();
-
-  if (error || !userLimit) {
-    return res.status(401).json({ error: 'Kullanıcı limit bilgisi bulunamadı.' });
-  }
-  if (userLimit.chat_usage_today >= userLimit.daily_chat_limit) {
-    return res.status(429).json({ error: 'Günlük sohbet limitinize ulaştınız.' });
-  }
-
   try {
+    // 1. Frontend'den gelen Authorization header'ını al ve kullanıcıyı doğrula
+    const authHeader = req.headers['authorization'];
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Oturum açılmamış veya token eksik.' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Kullanıcı bulunamadı veya oturum geçersiz.' });
+    }
+
+    const userId = user.id;
+    const { messages, model } = req.body;
+    
+    if (!messages || messages.length === 0) {
+      return res.status(400).json({ error: 'Mesaj içeriği boş olamaz.' });
+    }
+
+    const message = messages[messages.length - 1]?.content || "";
+
+    // 2. Supabase Limit Kontrolü
+    const { data: userLimit, error: limitError } = await supabase
+      .from('user_limits')
+      .select('chat_usage_today, daily_chat_limit')
+      .eq('id', userId)
+      .single();
+
+    if (limitError || !userLimit) {
+      return res.status(401).json({ error: 'Kullanıcı limit bilgisi bulunamadı.' });
+    }
+    if (userLimit.chat_usage_today >= userLimit.daily_chat_limit) {
+      return res.status(429).json({ error: 'Günlük sohbet limitinize ulaştınız.' });
+    }
+
     let aiResponseText = "";
 
     // 3. Seçilen Modele Göre API İsteği
@@ -53,9 +58,11 @@ export default async function handler(req, res) {
         })
       });
       const data = await response.json();
+      if (data.error) throw new Error("Groq API Hatası: " + (data.error.message || JSON.stringify(data.error)));
       aiResponseText = data.choices[0].message.content;
     } 
-    else if (model === 'gemini') {
+    else {
+      // Varsayılan olarak Gemini
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -67,15 +74,17 @@ export default async function handler(req, res) {
         })
       });
       const data = await response.json();
+      if (data.error) throw new Error("Gemini API Hatası: " + (data.error.message || JSON.stringify(data.error)));
       aiResponseText = data.candidates[0].content.parts[0].text;
     }
 
     // 4. Kullanımı 1 Arttır
     await supabase.rpc('increment_chat_usage', { user_id: userId }); 
 
-    res.status(200).json({ reply: aiResponseText });
+    return res.status(200).json({ reply: aiResponseText });
 
   } catch (err) {
-    res.status(500).json({ error: 'Yapay zeka ile iletişim kurulamadı.' });
+    console.error("Detaylı Sunucu Hatası:", err);
+    return res.status(500).json({ error: 'Sunucu Hatası: ' + err.message });
   }
 }
