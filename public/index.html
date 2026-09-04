@@ -98,7 +98,7 @@
   </div>
 </div>
 
-<!-- Sol Menü (Model seçici kaldırıldı) -->
+<!-- Sol Menü -->
 <aside>
   <div class="brand">✨ Livanni AI</div>
   <button class="new-chat-btn" id="newChatBtn">＋ Yeni Sohbet</button>
@@ -295,7 +295,7 @@ fileInput.addEventListener("change", (e) => {
 });
 
 window.clearAttachment = function() {
-  attachedFileBase64 = null;
+  attachedFileBase64 = "";
   fileInput.value = "";
   filePreviewContainer.style.display = "none";
   filePreviewContainer.innerHTML = "";
@@ -542,6 +542,9 @@ async function handleSend() {
   const currentAttachment = attachedFileBase64;
   const activeMode = mode;
 
+  // Mesaj gönderilirken o anki sohbetin kayıtlı modeli ne ise kesin olarak o alınır
+  const selectedModel = activeSession.model || "gemini";
+
   activeSession.history.push({ 
     role: "user", 
     content: text, 
@@ -558,7 +561,6 @@ async function handleSend() {
   window.clearAttachment();
   sendBtn.disabled = true;
   
-  const selectedModel = activeSession.model || modelSelect.value;
   statusEl.textContent = activeMode === "chat" ? `${selectedModel === "gemini" ? "Gemini" : "Llama"} düşünüyor...` : "Görsel üretiliyor...";
 
   try {
