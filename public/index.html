@@ -85,7 +85,8 @@
 </div>
 
 <script>
-const supabase = window.supabase.createClient(
+// Çakışma sorununu tamamen ortadan kaldırmak için global değişken adı 'supabaseClient' olarak güncellendi.
+const supabaseClient = window.supabase.createClient(
   "https://zqwfucqqbwrcevxohdby.supabase.co",
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpxd2Z1Y3FxYndyY2V2eG9oZGJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1NDAxNTMsImV4cCI6MjEwNDExNjE1M30.hG4TJz-xsjakB98KIOwnVzhm8xZkbJ_5WxmyCgR-HRI"
 );
@@ -124,11 +125,11 @@ authSubmit.addEventListener("click", async () => {
   authSubmit.disabled = true;
   try {
     if (isLoginMode) {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
       if (error) throw error;
       await onLoggedIn(data.session);
     } else {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabaseClient.auth.signUp({ email, password });
       if (error) throw error;
       if (data.session) {
         await onLoggedIn(data.session);
@@ -152,7 +153,7 @@ async function onLoggedIn(session) {
 }
 
 async function refreshLimit() {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseClient
     .from("user_limits")
     .select("usage_today, daily_limit")
     .eq("id", currentSession.user.id)
@@ -163,13 +164,13 @@ async function refreshLimit() {
 }
 
 document.getElementById("logoutBtn").addEventListener("click", async () => {
-  await supabase.auth.signOut();
+  await supabaseClient.auth.signOut();
   currentSession = null;
   appScreen.classList.add("hidden");
   authScreen.classList.remove("hidden");
 });
 
-supabase.auth.getSession().then(({ data }) => {
+supabaseClient.auth.getSession().then(({ data }) => {
   if (data.session) onLoggedIn(data.session);
 });
 
@@ -220,7 +221,7 @@ form.addEventListener("submit", async (e) => {
     const authHeader = { Authorization: `Bearer ${currentSession.access_token}` };
 
     if (mode === "chat") {
-      chatHistory.push({ role: "user", content: text });
+      chatHistory.pyush({ role: "user", content: text });
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeader },
