@@ -19,24 +19,25 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Prompt veya görsel gereklidir.' });
     }
 
-    // 1. DURUM: Resim Düzenleme / Arka Plan Değiştirme / Oda Dekoru (Img2Img)
+    // 1. DURUM: Resim Düzenleme / Arka Plan Değiştirme / Odaya Yerleştirme (Image-to-Image / Inpainting)
     if (inputImage) {
       const cleanBase64 = inputImage.includes(',') ? inputImage.split(',')[1] : inputImage;
       const formattedDataUri = `data:image/png;base64,${cleanBase64}`;
 
-      // Flux Inpainting / Redesign Modeli
-      const response = await fetch("https://api.replicate.com/v1/predictions", {
+      // Replicate Resmi FLUX Fill [dev] modeli
+      const response = await fetch("https://api.replicate.com/v1/models/black-forest-labs/flux-fill-dev/predictions", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "Prefer": "wait" // İşlem tamamlanana kadar yanıtı bekletir (Polling gerekmez)
         },
         body: JSON.stringify({
-          version: "c0b930819c922a6117326aa6a3eb77fb0b932822a153205776d54d1933f44503",
           input: {
             image: formattedDataUri,
-            prompt: prompt || "place the product in a modern luxury living room",
-            prompt_strength: 0.7
+            prompt: prompt || "place the furniture in a modern luxury living room with soft lighting",
+            guidance: 30,
+            output_format: "png"
           }
         })
       });
@@ -46,22 +47,14 @@ export default async function handler(req, res) {
         throw new Error(`Replicate API Hatası (${response.status}): ${errorText}`);
       }
 
-      let prediction = await response.json();
-
-      // İşlem bitene kadar bekle (Polling)
-      while (prediction.status !== "succeeded" && prediction.status !== "failed") {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        const checkRes = await fetch(prediction.urls.get, {
-          headers: { "Authorization": `Bearer ${token}` }
-        });
-        prediction = await checkRes.json();
-      }
-
-      if (prediction.status === "failed") {
-        throw new Error("Görsel işleme modeli işlemi tamamlayamadı.");
-      }
-
+      const prediction = await response.json();
       const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+
+      if (!outputUrl) {
+        throw new Error("Görsel oluşturulamadı, model boş yanıt döndürdü.");
+      }
+
+      // Oluşan resmi indirip Base64 formatına çevirme
       const imgRes = await fetch(outputUrl);
       const arrayBuffer = await imgRes.arrayBuffer();
       const resultBase64 = Buffer.from(arrayBuffer).toString('base64');
@@ -70,34 +63,29 @@ export default async function handler(req, res) {
     }
 
     // 2. DURUM: Sıfırdan Görsel Üretme (Text-to-Image)
-    const response = await fetch("https://api.replicate.com/v1/predictions", {
+    const response = await fetch("https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Prefer": "wait"
       },
       body: JSON.stringify({
-        version: "black-forest-labs/flux-schnell",
-        input: { prompt: prompt }
+        input: { 
+          prompt: prompt,
+          output_format: "png"
+        }
       })
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`API Hatası: ${errorText}`);
+      throw new Error(`Replicate API Hatası (${response.status}): ${errorText}`);
     }
 
-    let prediction = await response.json();
-
-    while (prediction.status !== "succeeded" && prediction.status !== "failed") {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      const checkRes = await fetch(prediction.urls.get, {
-        headers: { "Authorization": `Bearer ${token}` }
-      });
-      prediction = await checkRes.json();
-    }
-
+    const prediction = await response.json();
     const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+
     const imgRes = await fetch(outputUrl);
     const arrayBuffer = await imgRes.arrayBuffer();
     const resultBase64 = Buffer.from(arrayBuffer).toString('base64');
