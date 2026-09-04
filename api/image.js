@@ -32,8 +32,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 2. Google Imagen Görsel Üretim API İsteği
-    const imagenResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${process.env.GEMINI_API_KEY}`, {
+    // 2. Google Imagen 3 Görsel Üretim API İsteği (Doğru model adı ile)
+    const imagenResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
