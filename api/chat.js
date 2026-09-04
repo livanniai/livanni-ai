@@ -49,7 +49,7 @@ export default async function handler(req, res) {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: "llama-3.1-8b-instant", // Groq'un aktif ve kararlı hızlı modeli
+          model: "llama-3.3-70b-versatile", // Groq'un en kararlı ve ana Llama modeli
           messages: messages.map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content }))
         })
       });
