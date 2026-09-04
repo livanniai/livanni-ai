@@ -6,6 +6,7 @@
   SECRETS_SCAN_OMIT_PATHS = ".netlify/.next/cache"
   SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL"
 
+# API yönlendirmeleri (404 / HTML hatasını önler)
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
