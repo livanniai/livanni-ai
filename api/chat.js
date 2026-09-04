@@ -41,7 +41,7 @@ export default async function handler(req, res) {
 
     let aiResponseText = "";
 
-    // Güncel Model İsimleri ile İstekler
+    // Tamamen Güncel Model Adları
     if (model === 'llama') {
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -50,7 +50,7 @@ export default async function handler(req, res) {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: "llama-3.3-70b-versatile", // Güncel Groq Llama modeli
+          model: "llama-3.1-8b-instant", // Groq'un şu an aktif ve en kararlı hızlı modeli
           messages: messages.map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content }))
         })
       });
@@ -59,8 +59,7 @@ export default async function handler(req, res) {
       aiResponseText = data.choices[0].message.content;
     } 
     else {
-      // Güncel Gemini modeli ve endpoint'i
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
